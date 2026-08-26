@@ -1,0 +1,157 @@
+/* Custom styles for the Rent vs. Delayed Buy Calculator */
+body {
+    margin: 0;
+    padding: 0;
+}
+
+/* Smooth transitions for interactive elements */
+button, input {
+    transition: all 0.2s ease-in-out;
+}
+
+/* Disabled inputs should read as inert rather than merely unfocused */
+input:disabled, select:disabled {
+    background-color: #f3f4f6;
+    color: #9ca3af;
+    cursor: not-allowed;
+}
+
+/* Table striping for the detailed results by purchase delay B */
+#results-body tr:hover {
+    background-color: #f9fafb;
+}
+
+canvas {
+    max-width: 100%;
+}
+
+/* ---- Wealth-chart series controls (the tick-box tree beside the chart) ---- */
+.series-controls {
+    /* Fills whatever the title row leaves, so this panel ends level with the
+       chart beside it. The max-height only bites when the columns stack and the
+       parent has no fixed height of its own. */
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: 34rem;
+    overflow-y: auto;
+    padding: 0.5rem 0.75rem 0.5rem 0.5rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.75rem;
+    background: #fcfdff;
+}
+
+.series-section + .series-section {
+    margin-top: 0.6rem;
+    padding-top: 0.6rem;
+    border-top: 1px solid #eef2f7;
+}
+
+.series-section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+
+.series-section-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #1f2937;
+    line-height: 1.3;
+}
+
+.series-section-note {
+    margin: 0.15rem 0 0.25rem 1.6rem;
+    font-size: 0.7rem;
+    color: #6b7280;
+    line-height: 1.35;
+}
+
+/* One row per plottable line: tick box, colour swatch, name. */
+.series-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: 1rem;
+    padding: 0.15rem 0.25rem;
+    border-radius: 0.35rem;
+    cursor: pointer;
+}
+
+.series-row:hover {
+    background: #f1f5f9;
+}
+
+.series-swatch {
+    flex: none;
+    width: 18px;
+    height: 3px;
+    border-radius: 2px;
+}
+
+.series-label {
+    font-size: 0.72rem;
+    color: #374151;
+    line-height: 1.3;
+}
+
+/* A line that means nothing under the current strategy, e.g. a fixed deposit
+   when the ETF-only strategy is selected. */
+.series-row-disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.series-row-disabled:hover {
+    background: transparent;
+}
+
+/* The row whose line is under the pointer, or whose row is being hovered.
+   Set from both directions: see the hover wiring in app.js. */
+.series-row-active {
+    background: #e0f2fe;
+    box-shadow: inset 2px 0 0 #0284c7;
+}
+
+/* Colour only. A weight change would re-measure the text and push long labels
+   onto a second line as the pointer moves, so the highlight must never touch
+   any property that affects layout. */
+.series-row-active .series-label {
+    color: #0c4a6e;
+}
+
+/* ---- What the focused chart is and how it is worked out ------------------ */
+/* Filled in from either hover direction; see setActive in series-controls.js.
+   min-height is set from the tallest description measured down to a 900px
+   viewport, so swapping between descriptions never resizes the panel and the
+   heatmap below it does not shift. Re-measure if the wording grows. */
+.series-description {
+    margin-top: 0.75rem;
+    padding: 0.7rem 0.85rem;
+    min-height: 8rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.75rem;
+    background: #f8fafc;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: #334155;
+}
+
+.series-description strong {
+    color: #0f172a;
+}
+
+.series-description-body {
+    display: block;
+    margin-top: 0.2rem;
+}
+
+.series-description-swatch {
+    vertical-align: middle;
+    margin-right: 0.5rem;
+}
+
+.series-description-hint {
+    color: #64748b;
+    font-style: italic;
+}

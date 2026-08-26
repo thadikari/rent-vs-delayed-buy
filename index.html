@@ -1,14 +1,422 @@
 <!DOCTYPE html>
-<html>
-<body>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rent vs Delayed Buy — Optimal Home Purchase Timing Calculator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script async defer src="https://buttons.github.io/buttons.js"></script>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .input-field {
+      width: 100%;
+      box-sizing: border-box;
+      min-width: 0;
+      border: 1px solid #d1d5db;
+      background: #ffffff;
+      padding: 0.65rem 0.75rem;
+      border-radius: 0.5rem;
+      font-size: 0.95rem;
+      line-height: 1.4;
+      box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04);
+    }
+    .input-field:focus {
+      outline: none;
+      box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
+      border-color: #3b82f6;
+    }
+    .field-label {
+      display: block;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 0.35rem;
+    }
+    .section-card {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 1rem;
+      padding: 1.25rem;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+    }
+    .checkbox-field {
+      width: 1.1rem;
+      height: 1.1rem;
+      flex: none;
+      accent-color: #3b82f6;
+      cursor: pointer;
+    }
+    /* Floating readout for the hand-drawn B-S heatmap canvas. */
+    .heatmap-tooltip {
+      position: absolute;
+      z-index: 10;
+      pointer-events: none;
+      white-space: nowrap;
+      background: rgba(15, 23, 42, 0.92);
+      color: #f8fafc;
+      font-size: 0.75rem;
+      line-height: 1.35;
+      padding: 0.35rem 0.5rem;
+      border-radius: 0.375rem;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.25);
+    }
+    /* Subsection visual style to separate input groups */
+    .subsection {
+      background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+      border: 1px solid #e6eef8;
+      padding: 0.9rem 1rem;
+      border-radius: 0.75rem;
+      box-shadow: 0 2px 6px rgba(14, 32, 64, 0.04);
+      position: relative;
+    }
+    .subsection + .subsection {
+      margin-top: 0.75rem;
+    }
+    .subsection::before {
+      content: '';
+      position: absolute;
+      left: -6px;
+      top: 0.6rem;
+      width: 4px;
+      height: calc(100% - 1.2rem);
+      background: linear-gradient(180deg,#60a5fa,#34d399);
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans">
+  <div class="container mx-auto px-4 py-8 max-w-7xl">
+    <header class="text-center mb-8">
+      <div class="flex justify-center mb-4">
+        <div class="inline-flex items-center gap-3 rounded-full border border-slate-200 bg-white/90 px-3 py-2 shadow-sm text-sm text-slate-700 backdrop-blur-sm">
+          <span>Like this project?</span>
+          <a class="github-button" href="https://github.com/thadikari/rent-vs-delayed-buy" data-color-scheme="no-preference: light; light: light; dark: dark;" data-icon="octicon-star" data-size="large" aria-label="Star thadikari/rent-vs-delayed-buy on GitHub">Star</a>
+        </div>
+      </div>
+      <h1 class="text-4xl font-extrabold text-blue-700 mb-2">Rent vs Delayed Buy — Optimal Home Purchase Timing Calculator</h1>
+      <p class="text-lg text-gray-600">This tool evaluates whether buying now or waiting to accumulate a larger down payment is better for your overall wealth.</p>
+      <p class="mt-3 text-sm text-gray-600">Both paths are funded by the same monthly income, and every housing cost is paid out of it as it falls due &mdash; so no cost is ever counted twice, and the two totals can be compared directly.</p>
+  
+      <div class="mt-6 section-card max-w-4xl mx-auto">
+        <div class="flex flex-col md:flex-row items-stretch gap-3">
+          <div class="flex-1 rounded-xl border border-blue-200 bg-blue-50 p-4 text-left">
+            <div class="text-xs uppercase tracking-wide text-blue-700 font-semibold">Today</div>
+            <div class="font-semibold text-gray-900">Target house price</div>
+            <div class="text-sm text-gray-700">The price you enter, treated as today's value</div>
+          </div>
+          <div class="flex-1 rounded-xl border border-amber-200 bg-amber-50 p-4 text-left">
+            <div class="text-xs uppercase tracking-wide text-amber-700 font-semibold">Month B</div>
+            <div class="font-semibold text-gray-900">You buy</div>
+            <div class="text-sm text-gray-700">The price has grown &mdash; and so has the down payment you saved</div>
+          </div>
+          <div class="flex-1 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-left">
+            <div class="text-xs uppercase tracking-wide text-emerald-700 font-semibold">Month S</div>
+            <div class="font-semibold text-gray-900">You sell</div>
+            <div class="text-sm text-gray-700">The house has appreciated again, and both paths are measured here</div>
+          </div>
+        </div>
 
-<h1>JavaScript</h1>
+        <div class="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-left">
+          <div class="font-semibold text-gray-900 mb-2">How the timeline works</div>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm text-gray-700">
+            <div><span class="font-semibold">Today &rarr; Month B:</span> you rent, and invest your cash on hand plus whatever income the rent leaves. This becomes the down payment.</div>
+            <div><span class="font-semibold">Month B:</span> you buy at the price the house has grown to, spending the down payment and the closing costs, and take on the mortgage.</div>
+            <div><span class="font-semibold">Month B &rarr; Month S:</span> you own the home, paying the mortgage and the running costs out of income, then sell at Month S.</div>
+          </div>
+          <div class="mt-3 pt-3 border-t border-slate-200 text-sm text-gray-700">
+            <span class="font-semibold">Compared against:</span> never buying at all &mdash; renting for the whole S months and investing throughout. Both paths are totted up at Month S, which is what makes them comparable.
+          </div>
+        </div>
+      </div>
+    </header>
 
-<button type="button"
-onclick="document.getElementById('demo').innerHTML = Date()">
-Click me to display Date and Time.</button>
+    <div class="space-y-6">
+      <div class="section-card">
+        <h2 class="text-2xl font-bold mb-5">Inputs</h2>
+        <form id="calculator-form" class="space-y-6">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="space-y-6">
+              <div class="space-y-4 subsection">
+                <h3 class="text-lg font-semibold text-amber-700">Rental Assumptions</h3>
+                <p class="text-sm text-gray-600">These assumptions estimate the cost of renting while you wait to buy. They are used to compare the buy-and-sell path against continuing to rent through Month S.</p>
+                <div class="space-y-1.5">
+                  <label class="field-label">Monthly rent during waiting period ($/Mo)</label>
+                  <input id="monthly-rent" type="number" value="2000" class="input-field" title="Estimated monthly rent you would pay during the waiting period if you do not buy yet. This contributes to the rent-only comparison over the full sale Month S period." />
+                </div>
+                <div class="space-y-1.5">
+                  <label class="field-label">Rent increase (%/Yr)</label>
+                  <input id="rent-increase" type="number" value="3.0" step="0.01" class="input-field" title="Annual rent growth used to project rising rental costs over time for the rent-only comparison through Month S." />
+                </div>
+ 
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                  <div class="flex flex-col">
+                    <label class="field-label mb-0.5 min-h-[2.25rem]">Other rental costs ($/Yr)</label>
+                    <input id="rental-insurance-annual" type="number" value="200" class="input-field" title="Estimated annual non-rent rental costs such as renter's insurance, condo fees, or other recurring rental expenses. These are treated as fixed annual amounts and increase with inflation over time." />
+                  </div>
+                  <div class="flex flex-col">
+                    <label class="field-label mb-0.5 min-h-[2.25rem]">Other rental cost increase (%/Yr)</label>
+                    <input id="rental-insurance-increase" type="number" value="2.0" step="0.01" class="input-field" title="Annual increase for other recurring rental costs such as insurance, condo fees, or similar expenses." />
+                  </div>
+                </div>
+              </div>
+ 
+              <div class="space-y-4 subsection">
+                <h3 class="text-lg font-semibold text-blue-700">Home Purchase Assumptions</h3>
+                <p class="text-sm text-gray-600">These inputs define the target home and the financing terms. The stated price is treated as today's value, then the calculator grows it over time until Month B and again until Month S.</p>
+                <div class="space-y-1.5">
+                  <label class="field-label">Target house price ($)</label>
+                  <input id="home-price" type="number" value="750000" class="input-field" title="Enter the house price you want to buy at today. The calculator grows this price over time until Month B for the purchase price and until Month S for the selling price." />
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div class="flex flex-col">
+                    <label class="field-label mb-0.5 min-h-[2.25rem]">Home appreciation (%/Yr)</label>
+                    <input id="appreciation-rate" type="number" value="3.0" step="0.01" class="input-field" title="Annual home appreciation used to grow the house value from today to Month B for purchase and from Month B to Month S for the sale." />
+                  </div>
+                  <div class="flex flex-col">
+                    <label class="field-label mb-0.5 min-h-[2.25rem]">Mortgage interest (%/Yr)</label>
+                    <input id="interest-rate" type="number" value="6.5" step="0.01" class="input-field" title="Annual mortgage rate used to estimate the monthly loan payment and remaining balance over the holding period ending at Month S." />
+                  </div>
+                </div>
+                <div class="space-y-1.5">
+                  <label class="field-label">Mortgage term (years)</label>
+                  <input id="mortgage-term" type="number" value="25" class="input-field" title="The amortization period of the mortgage, which affects the monthly payment and payoff timeline through the sale at Month S. The full term starts at the purchase in Month B, so delaying the purchase does not shorten it." />
+                </div>
+                <div class="mt-3 border-t pt-3">
+                  <div class="space-y-1.5">
+                    <label class="field-label">Purchase closing costs (% of purchase price)</label>
+                    <input id="purchase-closing-cost-percent" type="number" value="2.0" step="0.01" class="input-field" title="Estimated all-in buyer closing costs expressed as a percentage of the purchase price. Typical examples include land transfer tax, legal fees, title/registration, inspection, appraisal, and other buyer-side closing charges." />
+                  </div>
+  
+                  <div class="mt-3 border-t pt-3">
+                    <h4 class="text-sm font-semibold">Mortgage Default Insurance</h4>
+                    <p class="text-xs text-gray-600">If your down payment is below 20%, most lenders require mortgage default insurance. Choose how you want the premium to be handled. If you leave the custom rate at 0%, the calculator uses a conservative default band based on your down-payment percentage.</p>
+                    <div class="grid grid-cols-1 gap-2 mt-2 text-sm">
+                      <label class="flex items-start gap-2 rounded-md border border-slate-200 p-2">
+                        <input type="radio" name="mortgage-insurance-option" value="capitalized" checked title="Apply default insurance when the down payment is below 20% and add the premium to the mortgage balance." />
+                        <span><span class="font-medium">Apply insurance and add the premium to the mortgage</span><br><span class="text-gray-600">This keeps more cash available at purchase, but increases the loan balance and monthly payment.</span></span>
+                      </label>
+                      <label class="flex items-start gap-2 rounded-md border border-slate-200 p-2">
+                        <input type="radio" name="mortgage-insurance-option" value="down-payment" title="Apply default insurance when the down payment is below 20% and pay the premium from your available down-payment funds." />
+                        <span><span class="font-medium">Apply insurance and pay the premium from the down payment</span><br><span class="text-gray-600">This reduces the cash available for the purchase, but keeps the mortgage balance unchanged.</span></span>
+                      </label>
+                      <label class="flex items-start gap-2 rounded-md border border-slate-200 p-2">
+                        <input type="radio" name="mortgage-insurance-option" value="none" title="Do not include mortgage default insurance in the comparison." />
+                        <span><span class="font-medium">Do not apply mortgage default insurance</span><br><span class="text-gray-600">This assumes a down payment of 20% or more, or that insurance is not required.</span></span>
+                      </label>
+                    </div>
+                    <div id="md-custom-rate-container" class="mt-3 pt-2 border-t">
+                      <label class="field-label">Custom default insurance rate (% of loan, 0 to auto)</label>
+                      <input id="md-custom-rate" type="number" value="0" step="0.01" class="input-field" title="Set a custom mortgage default insurance premium as a percent of the loan. Enter 0 to use the auto banded estimate." />
+                    </div>
+                    <div id="md-rate-bands-note" class="mt-2 text-xs text-gray-600">
+                      Auto rate bands used when custom = 0: DP &lt;5% → 4.00% (not normally insurable) | DP 5–9.99% → 3.60% | DP 10–14.99% → 2.80% | DP 15–19.99% → 1.75% | DP ≥20% → 0%
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-<p id="demo"></p>
+            <div class="space-y-6">
+              <div class="space-y-4 subsection">
+                <h3 class="text-lg font-semibold text-emerald-700">Waiting Period Investment Assumptions</h3>
+                <p class="text-sm text-gray-600">This is the money that keeps accumulating until Month B and continues compounding through Month B. It becomes the down payment pool used for the purchase at Month B.</p>
+                <div class="space-y-1.5">
+                  <label class="field-label">Current cash on hand ($)</label>
+                  <input id="cash-on-hand" type="number" value="40000" class="input-field" title="Cash available today that you can invest and later use as part of the down payment at Month B." />
+                </div>
+                <div class="space-y-1.5">
+                  <label class="field-label">Gross monthly income ($/Mo)</label>
+                  <input id="monthly-income" type="number" value="10000" class="input-field" title="Gross monthly income available for housing and saving, before rent. It applies for the whole period up to Month S in both paths: each month the calculator subtracts that month's housing cost (rent while renting, then the mortgage payment plus ownership costs after buying) and invests the remainder. A month whose housing cost exceeds this income draws the investment balance down instead." />
+                </div>
+                <div class="space-y-1.5">
+                  <label class="field-label">Waiting-period investment strategy</label>
+                  <div class="grid grid-cols-1 gap-2 mt-1 text-sm">
+                    <label class="flex items-start gap-2 rounded-md border border-slate-200 p-2">
+                      <input type="radio" name="waiting-strategy" value="fd-plus-etf" checked title="Keep cash in the best-matching fixed deposit and invest monthly savings in ETFs during the waiting period." />
+                      <span><span class="font-medium">FD + ETF mix</span><br><span class="text-gray-600">Keep cash in the best-fitting fixed deposit and invest monthly savings in ETFs.</span></span>
+                    </label>
+                    <label class="flex items-start gap-2 rounded-md border border-slate-200 p-2">
+                      <input type="radio" name="waiting-strategy" value="etf-only" title="Use the same ETF return for all waiting-period savings, with no FD split." />
+                      <span><span class="font-medium">ETF only</span><br><span class="text-gray-600">Use one investment return assumption for all waiting-period savings, without the FD split.</span></span>
+                    </label>
+                  </div>
+                </div>
+ 
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div class="flex flex-col">
+                    <label class="field-label mb-0.5 min-h-[2.25rem]">ETF expected APR (%/Yr)</label>
+                    <input id="etf-apr" type="number" value="6.0" step="0.01" class="input-field" title="Expected annual return for ETFs purchased from monthly savings. Payout frequency is modeled but APR drives long-term return." />
+                  </div>
+                  <div class="flex flex-col">
+                    <label class="field-label mb-0.5 min-h-[2.25rem]">ETF payout frequency</label>
+                    <select id="etf-frequency" class="input-field" title="Distribution frequency for ETFs bought with monthly savings. This affects payout timing rather than long-term APR in the current model.">
+                      <option value="quarterly">Quarterly (4x/year)</option>
+                      <option value="semiannual">Semi-annual (2x/year)</option>
+                    </select>
+                  </div>
+                </div>
+ 
+                <div id="fd-lock-section" class="mt-3 border-t pt-3">
+                  <h4 class="text-sm font-semibold">Fixed-deposit lock options</h4>
+                  <p class="text-xs text-gray-600">If you can lock waiting-period savings into a fixed deposit matching the wait length (e.g., 24 months → 2-year FD), the waiting-period APR can differ from the ongoing investment APR. Enable auto-select to use the FD rate when B matches a term.</p>
+                  <div class="flex items-center gap-3 mt-2">
+                    <input id="auto-fd" type="checkbox" checked class="checkbox-field" title="When checked, if Month B equals an available FD term (12, 24, 36 or 60 months), that FD APR is used for the waiting-period cash. If Month B matches no term, the cash earns the investment return after purchase instead." />
+                    <div>
+                      <label class="field-label" style="margin-bottom:0">Auto-select FD by matching B</label>
+                      <div class="text-xs text-gray-600">If the purchase delay matches a known fixed-deposit term, the calculator will use that FD rate for the waiting-period cash.</div>
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2 text-sm">
+                    <div class="flex flex-col">
+                      <label class="field-label mb-1 min-h-[2.5rem]">1-year FD APR (%/Yr)</label>
+                      <input id="fd-12" type="number" value="3.50" step="0.01" class="input-field" title="Estimated 1-year fixed deposit APR (default current market)." />
+                    </div>
+                    <div class="flex flex-col">
+                      <label class="field-label mb-1 min-h-[2.5rem]">2-year FD APR (%/Yr)</label>
+                      <input id="fd-24" type="number" value="4.00" step="0.01" class="input-field" title="Estimated 2-year fixed deposit APR (default current market)." />
+                    </div>
+                    <div class="flex flex-col">
+                      <label class="field-label mb-1 min-h-[2.5rem]">3-year FD APR (%/Yr)</label>
+                      <input id="fd-36" type="number" value="4.25" step="0.01" class="input-field" title="Estimated 3-year fixed deposit APR (default current market)." />
+                    </div>
+                    <div class="flex flex-col">
+                      <label class="field-label mb-1 min-h-[2.5rem]">5-year FD APR (%/Yr)</label>
+                      <input id="fd-60" type="number" value="4.75" step="0.01" class="input-field" title="Estimated 5-year fixed deposit APR (default current market)." />
+                    </div>
+                  </div>
+                </div>
+              </div>
+ 
+              <div class="space-y-4 subsection">
+                <h3 class="text-lg font-semibold text-purple-700">Post-Purchase Assumptions</h3>
+                <p class="text-sm text-gray-600">These inputs cover the recurring costs of owning the property and the one-time costs of selling it. They reduce the final wealth you keep after the buy-and-sell path. Note: renter insurance is modeled as a fixed annual premium (with its own annual increase), while homeowner insurance is modeled as a percentage of home value (replacement-cost aligned).</p>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div class="flex flex-col">
+                    <label class="field-label mb-0 min-h-[2.5rem]">Property tax (%/Yr of home value)</label>
+                    <input id="property-tax" type="number" value="1.2" step="0.01" class="input-field" title="Annual property tax charged as a percentage of the home's value." />
+                  </div>
+                  <div class="flex flex-col">
+                    <label class="field-label mb-0 min-h-[2.5rem]">Maintenance (%/Yr of home value)</label>
+                    <input id="maintenance-percent" type="number" value="1.5" step="0.01" class="input-field" title="Estimated annual maintenance cost as a percentage of the home's value." />
+                  </div>
+                  <div class="flex flex-col">
+                    <label class="field-label mb-0 min-h-[2.5rem]">Utilities ($/Mo)</label>
+                    <input id="utilities-monthly" type="number" value="300" class="input-field" title="Typical monthly utility expense after buying the home." />
+                  </div>
+                </div>
+ 
+                <div class="space-y-1.5 mt-3">
+                  <label class="field-label">Home insurance (%/Yr of home value)</label>
+                  <input id="home-insurance-percent" type="number" value="0.25" step="0.01" class="input-field" title="Annual homeowner insurance cost expressed as a percentage of home value. Home insurance typically scales with replacement value, so a percentage of the home's value models it well." />
+                </div>
+                <div class="space-y-1.5 mt-3">
+                  <label class="field-label">Investment return after purchase (%/Yr)</label>
+                  <input id="investment-apr" type="number" value="5.0" step="0.01" class="input-field" title="Annual return used after purchase for any remaining cash and for the monthly surplus left once the mortgage payment and ownership costs are paid. A monthly shortfall is charged at the same rate. It is also the fallback return for waiting-period cash when no fixed-deposit term matches Month B." />
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                  <div class="flex flex-col">
+                    <label class="field-label mb-0.5 min-h-[2.25rem]">Selling cost rate (% of sale price)</label>
+                    <input id="realtor-commission" type="number" value="6.0" step="0.01" class="input-field" title="Estimated percentage-based selling costs such as realtor commission, buyer agent fee, and other sale-price-linked fees. Typical examples are real-estate commissions, marketing costs, and similar percentages of the final sale price." />
+                  </div>
+                  <div class="flex flex-col">
+                    <label class="field-label mb-0.5 min-h-[2.25rem]">Fixed selling fees ($)</label>
+                    <input id="legal-fees" type="number" value="2500" class="input-field" title="Fixed one-off selling costs such as legal fees, title transfer, mortgage discharge/admin charges, and other flat transaction fees that do not scale with sale price." />
+                  </div>
+                </div>
+                <div class="space-y-1.5 mt-3">
+                  <label class="field-label">Sale month S (months since today)</label>
+                  <input id="selected-s" type="number" min="0" step="1" value="84" class="input-field" title="Absolute month, counted from today, at which the home is sold. It ends both paths, so every chart is measured at this month, and it is the upper limit of the main chart's x-axis. Must be at least the purchase month B for the buy path to complete before the sale." />
+                </div>
+              </div>
+            </div>
 
+          </div>
+
+        </form>
+      </div>
+
+      <div class="space-y-6">
+        <div class="section-card">
+          <h3 class="text-xl font-bold mb-2">Analysis</h3>
+          <div class="text-sm text-gray-600 mb-4">Two paths, measured at the same moment: buying at a given month, or renting all the way to the sale at Month S.</div>
+          <div class="grid grid-cols-1 lg:grid-cols-[22rem_1fr] gap-4">
+            <!-- Fixed height on large screens so this column ends level with the chart. -->
+            <div class="flex flex-col lg:h-[34rem]">
+              <div class="flex items-center justify-between gap-2 mb-2">
+                <div class="text-sm font-semibold text-gray-700">Charts to display</div>
+                <div class="flex items-center gap-2">
+                  <button type="button" id="plot-all" class="px-2.5 py-1 text-xs bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200" title="Tick every chart in every section. Charts that are unavailable under the current investment strategy stay off.">Plot all</button>
+                  <button type="button" id="plot-none" class="px-2.5 py-1 text-xs bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200" title="Untick every chart, clearing the plot.">Plot none</button>
+                </div>
+              </div>
+              <div id="series-controls" class="series-controls"></div>
+            </div>
+            <div class="relative h-[20rem] sm:h-[28rem] lg:h-[34rem]">
+              <canvas id="wealthChart"></canvas>
+            </div>
+          </div>
+
+          <div id="series-description" class="series-description">
+            <span class="series-description-hint">Point at a chart, or at one of its tick boxes, to read what it shows and how it is worked out.</span>
+          </div>
+
+
+          <!-- Still being worked on: hidden unless the URL carries ?dev -->
+          <div class="mt-6" id="wealth-surface" hidden>
+            <h4 class="text-lg font-semibold mb-2">Wealth surface: purchase delay B vs sale month S</h4>
+            <div class="text-sm text-gray-600 mb-3">Heatmap showing final buy-path net wealth when buying at Month B and selling at Month S. Both axes span 0 to the sale month S, the dashed line marks S itself, and grey cells are invalid (S &lt; B). Hover a cell to read its exact value.</div>
+            <div id="heatmap-note" class="text-xs text-amber-700 mb-3"></div>
+            <div class="relative h-[20rem] sm:h-[28rem]">
+              <canvas id="bsHeatmap" style="width:100%;height:100%;display:block;"></canvas>
+            </div>
+          </div>
+
+
+        </div>
+
+        <!-- Still being worked on: hidden unless the URL carries ?dev -->
+        <div class="section-card overflow-auto" id="details-section" hidden>
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-lg font-bold">Detailed results by purchase delay B (months)</h3>
+            <div>
+              <button id="toggle-details" class="px-3 py-1 bg-gray-100 border rounded-md">Show details</button>
+            </div>
+          </div>
+          <div id="details-panel" style="display:none;">
+            <table class="min-w-full text-left">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-2">Purchase delay B (months)</th>
+                  <th class="px-4 py-2">Price at Month B</th>
+                  <th class="px-4 py-2">Down payment used</th>
+                  <th class="px-4 py-2">Loan amount</th>
+                  <th class="px-4 py-2">MD insurance (applied / premium)</th>
+                  <th class="px-4 py-2">Wealth at sale Month S</th>
+                  <th class="px-4 py-2">Renting wealth at Month S</th>
+                </tr>
+              </thead>
+              <tbody id="results-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Load order matters: each file uses the ones above it.
+       util   -> shared formatting and month sampling
+       model  -> the financial simulation (pure; no DOM)
+       inputs -> the form, read into the object the model takes
+       series -> the catalogue of plottable lines, and the tick-box tree
+       charts -> presentation only
+       app    -> wires input changes to model runs and redraws -->
+  <script src="js/util.js"></script>
+  <script src="js/model.js"></script>
+  <script src="js/inputs.js"></script>
+  <script src="js/series.js"></script>
+  <script src="js/series-controls.js"></script>
+  <script src="js/line-chart.js"></script>
+  <script src="js/heatmap.js"></script>
+  <script src="js/app.js"></script>
 </body>
-</html> 
+</html>
