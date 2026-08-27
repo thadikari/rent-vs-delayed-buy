@@ -20,8 +20,10 @@
  *   defaultOn  ticked when the page loads; everything else starts unticked
  *
  * Colour is assigned by section — greens for the rent path, purples for house
- * value, ambers for the wait, roses for the purchase, blues for ownership — so a
- * line's family tells you which section it belongs to.
+ * value, ambers for the wait, roses for the purchase, greys for the mortgage,
+ * blues for ownership — so a line's family tells you which section it belongs
+ * to. The one exception is the insurance premium, kept pink inside the grey
+ * mortgage group because it is a fee rather than a balance.
  */
 
 window.RentVsBuy = window.RentVsBuy || {};
@@ -37,7 +39,8 @@ window.RentVsBuy.series = (function () {
       title: 'Total wealth: rent path vs delayed buy path',
       note: 'The two figures that answer the question, both measured at month S so '
         + 'they can be compared directly: what you are worth having never bought, '
-        + 'against what you are worth having bought at that month and sold at S. '
+        + 'against what you are worth having bought at month B and sold at S. Each '
+        + 'point is the case where you buy at that month, so B = the x-axis month. '
         + 'Where the buy line sits above the flat rent line, buying won; its highest '
         + 'point is the best month to buy.',
       series: [
@@ -57,12 +60,12 @@ window.RentVsBuy.series = (function () {
         },
         {
           key: 'headlineBuyWealth',
-          description: 'What you are worth at month S if you buy at that month and sell at S: the '
+          description: 'What you are worth at month S if you buy at month B and sell at S: the '
             + 'investment balance plus the cash the sale leaves, less any financed '
             + 'shortfall. Read it as a curve over waiting time - its highest point is the '
             + 'best month to buy, and the gap to the flat rent line is what the decision '
             + 'is worth. The sections below show where the figure comes from.',
-          label: 'Delayed buy path: total wealth at month S (buying at that month)',
+          label: 'Delayed buy path: total wealth at month S (buying at month B)',
           color: 'rgb(30,64,175)',
           width: 3,
           defaultOn: true,
@@ -256,36 +259,87 @@ window.RentVsBuy.series = (function () {
         },
         {
           /* Not the same as "available": this is clamped to the purchase price,
-             floored at zero, and reduced by the insurance premium when that is
-             paid in cash. It is the figure that sizes the mortgage. */
+             floored at zero, and reduced by whatever share of the insurance
+             premium it can cover when that is paid in cash. It is the figure
+             that sizes the mortgage. */
           key: 'downPaymentUsed',
           description: 'The down payment that actually goes into the house, and the figure that '
             + 'sizes the mortgage. It is the available amount capped at the purchase price, '
-            + 'floored at zero, and reduced by the insurance premium when you choose to pay '
-            + 'that in cash. It sits on top of the "available" line unless one of those '
-            + 'three adjustments bites.',
+            + 'floored at zero, and reduced by as much of the insurance premium as it can '
+            + 'cover when you choose to pay that in cash - any remainder is borrowed. It '
+            + 'sits on top of the "available" line unless one of those adjustments bites.',
           label: 'Down payment actually used at month B',
           color: 'rgb(251,113,133)',
           from: 'buy',
           pick: s => s.downPaymentUsed,
         },
+      ],
+    },
+    {
+      /* Everything about the debt itself, in one place: what you borrow at month
+         B, the premium rolled into it, and what the interest and the outstanding
+         balance come to by month S. All four follow from the down payment
+         reached at month B, which the purchase section above builds up. */
+      id: 'mortgage',
+      title: 'Buy path: mortgage amounts',
+      note: 'Each point is the case where you buy at that month, so B = the x-axis month. '
+        + 'What you borrow at month B, and what that debt comes to by month S. Waiting '
+        + 'longer means a bigger down payment, so every line here falls as B rises.',
+      series: [
+        {
+          key: 'loanAmount',
+          description: 'The whole amount borrowed at month B: the purchase price less the down '
+            + 'payment actually used, plus any default insurance premium that had to be '
+            + 'financed. Paying the premium out of the down payment does not shrink it, '
+            + 'because a smaller down payment leaves the same amount owing, so both '
+            + 'insurance options plot identically here. This is the figure the monthly '
+            + 'payment is worked out from, so the interest and the balance below both '
+            + 'follow from it.',
+          label: 'Total mortgaged amount at month B (includes default insurance)',
+          color: 'rgb(15,23,42)',
+          width: 2,
+          from: 'buy',
+          pick: s => s.loanAmount,
+        },
         {
           /* Zero once the down payment reaches 20% of the price, or when the
-             insurance option is switched off. Deliberately last in the section:
-             it is NOT part of the "available + closing costs" identity above,
-             because the premium is either rolled into the loan or taken out of
-             the down payment rather than added on top of the savings. */
+             insurance option is switched off. Kept pink rather than grey like the
+             rest of this section because it is a fee, not a balance. */
           key: 'mortgageInsurance',
           description: 'The mortgage default insurance premium required at month B, given the down '
             + 'payment reached by then. It is a percentage of the loan, taken from the rate '
             + 'bands or from your custom rate, and it drops to zero once the down payment '
-            + 'reaches 20% of the price. It sits outside the down payment plus closing costs '
-            + 'total, because the premium is either added to the loan or taken out of the '
-            + 'down payment rather than paid on top of savings.',
+            + 'reaches 20% of the price. It is already inside the total mortgaged amount '
+            + 'above. It sits outside the down payment plus closing costs total in the '
+            + 'purchase section, because the premium is either added to the loan or taken '
+            + 'out of the down payment rather than paid on top of savings.',
           label: 'Required mortgage default insurance at month B',
           color: 'rgb(219,39,119)',
           from: 'buy',
           pick: s => s.mortgageInsurancePremium,
+        },
+        {
+          key: 'interestPaid',
+          description: 'All the mortgage interest paid between the purchase at month B and the sale '
+            + 'at month S, accumulated month by month from the outstanding balance. Buying '
+            + 'later means a bigger down payment, a smaller loan and less interest. It is a '
+            + 'pure cost: unlike the principal, none of it comes back to you as equity.',
+          label: 'Total mortgage interest paid, month B to S',
+          color: 'rgb(148,163,184)',
+          from: 'buy',
+          pick: s => s.interestPaid,
+        },
+        {
+          key: 'mortgageBalanceAtS',
+          description: 'How much of the loan is still owed when the house is sold. The total '
+            + 'mortgaged amount is amortised from the purchase over the full mortgage term '
+            + 'at the mortgage rate — delaying the purchase does not shorten the term — '
+            + 'and payments stop if the term ends before month S. It is subtracted from the '
+            + 'net sale proceeds to give the cash in hand, in the section below.',
+          label: 'Mortgage balance still owed at month S',
+          color: 'rgb(100,116,139)',
+          from: 'buy',
+          pick: s => s.mortgageBalanceAtSale,
         },
       ],
     },
@@ -302,36 +356,14 @@ window.RentVsBuy.series = (function () {
           description: 'The investment account from the purchase through to the sale, valued at '
             + 'month S. It opens with whatever savings survived the purchase, then each '
             + 'month adds income minus the mortgage payment and the running costs at the '
-            + 'investment return after purchase. A shortfall is taken out instead, and the '
-            + 'balance never goes below zero. Add the cash left after selling to get total '
-            + 'wealth if selling.',
+            + 'investment return after purchase. A month that costs more than it brings '
+            + 'in is met from the balance instead. It starts below zero when the closing '
+            + 'costs alone exhausted the savings, and that debt is carried at the same '
+            + 'rate. Add the cash left after selling to get total wealth if selling.',
           label: 'Savings invested from month B to S, valued at month S',
           color: 'rgb(125,211,252)',
           from: 'buy',
           pick: s => s.investmentsAtSale,
-        },
-        {
-          key: 'interestPaid',
-          description: 'All the mortgage interest paid between the purchase at month B and the sale '
-            + 'at month S, accumulated month by month from the outstanding balance. Buying '
-            + 'later means a bigger down payment, a smaller loan and less interest. It is a '
-            + 'pure cost: unlike the principal, none of it comes back to you as equity.',
-          label: 'Total mortgage interest paid, month B to S',
-          color: 'rgb(148,163,184)',
-          from: 'buy',
-          pick: s => s.interestPaid,
-        },
-        {
-          key: 'mortgageBalanceAtS',
-          description: 'How much of the loan is still owed when the house is sold. The loan is '
-            + 'amortised from the purchase over the full mortgage term at the mortgage rate '
-            + '— delaying the purchase does not shorten the term — and payments stop if the '
-            + 'term ends before month S. It is subtracted from the net sale proceeds to '
-            + 'give the cash in hand.',
-          label: 'Mortgage balance still owed at month S',
-          color: 'rgb(15,23,42)',
-          from: 'buy',
-          pick: s => s.mortgageBalanceAtSale,
         },
         {
           /* Sale price less selling costs less the outstanding mortgage. Goes

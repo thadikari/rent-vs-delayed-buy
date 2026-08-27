@@ -59,9 +59,13 @@ window.RentVsBuy.lineChart = (function () {
           borderDash: spec.dash || [],
           borderWidth: isFocused ? width + FOCUS_EXTRA_WIDTH : width,
           fill: false,
-          tension: 0.2,
-          // No dots: with up to a hundred samples they only add noise. The wider
-          // hit radius keeps the shared tooltip easy to trigger.
+          /* Straight segments between months, not a spline. A one-month step -
+             an insurance band being crossed, say - has to read as a step; bezier
+             smoothing rounds those corners off and can overshoot around them,
+             drawing a curve the model never produced. */
+          tension: 0,
+          // No dots: one point per month would only add noise. The wider hit
+          // radius keeps the shared tooltip easy to trigger.
           pointRadius: 0,
           pointHitRadius: 8,
         };

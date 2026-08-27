@@ -33,7 +33,9 @@
  * THE RULE THAT KEEPS THE COMPARISON FAIR
  * ---------------------------------------
  * Both paths receive the same income every month, and every housing cost is paid
- * out of that income:
+ * out of that income. That figure is not gross pay: it is what is left of it once
+ * every non-housing living cost has been met, because the model has no other
+ * expense of its own and invests every dollar housing does not consume.
  *
  *   while renting  ->  rent + other rental costs
  *   after buying   ->  mortgage payment + property tax + maintenance
@@ -83,13 +85,23 @@ window.RentVsBuy.model = (function () {
   /* Mortgage default insurance premium as a share of the loan, by down-payment
      ratio, used when the custom rate is left at 0. Highest ratio first: the
      lookup takes the first band the ratio reaches. Kept in step with the band
-     note rendered in index.html. */
+     note rendered in index.html.
+
+     These are CMHC's published rates for a standard purchase with a traditional
+     down payment and an amortisation of 25 years or less, expressed by down
+     payment rather than by loan-to-value: 20% down is 80% LTV.
+
+     Two things they leave out. Below 5% down the loan is not insurable at all,
+     so the bottom band is a stand-in for a purchase that could not happen; the
+     model has no minimum-down-payment rule to reject it. And in Ontario the
+     premium attracts 8% provincial sales tax, payable in cash at closing and
+     never capitalised, which the model does not charge. */
   const MD_INSURANCE_BANDS = [
     { minDownPaymentRatio: 0.20, rate: 0 },
-    { minDownPaymentRatio: 0.15, rate: 0.0175 },
-    { minDownPaymentRatio: 0.10, rate: 0.028 },
-    { minDownPaymentRatio: 0.05, rate: 0.036 },
-    { minDownPaymentRatio: 0, rate: 0.04 },
+    { minDownPaymentRatio: 0.15, rate: 0.028 },
+    { minDownPaymentRatio: 0.10, rate: 0.031 },
+    { minDownPaymentRatio: 0.05, rate: 0.040 },
+    { minDownPaymentRatio: 0, rate: 0.040 },
   ];
 
   // -------------------------------------------------------------- rate helpers
@@ -314,16 +326,21 @@ window.RentVsBuy.model = (function () {
 
     /* Two ways to handle the premium:
          'capitalized'  -> roll it into the loan, leaving the down payment alone
-         'down-payment' -> pay it in cash, shrinking the down payment          */
-    const paidInCash = insurance.applied && inputs.mdInsuranceMode === 'down-payment';
-    const downPaymentUsed = paidInCash
-      ? Math.max(0, downPaymentFunded - insurance.premium)
-      : downPaymentFunded;
+         'down-payment' -> pay it in cash, shrinking the down payment
 
-    let loanAmount = Math.max(0, priceAtPurchase - downPaymentUsed);
-    if (insurance.applied && inputs.mdInsuranceMode === 'capitalized') {
-      loanAmount += insurance.premium;
-    }
+       Only what the down payment can actually cover is paid in cash; the rest
+       has to be borrowed like any other premium. Dropping that remainder would
+       hand the buyer a smaller loan than the capitalized option for no reason. */
+    const paidInCash = insurance.applied && inputs.mdInsuranceMode === 'down-payment';
+    const premiumFromDownPayment = paidInCash
+      ? Math.min(insurance.premium, downPaymentFunded)
+      : 0;
+    const premiumFinanced = insurance.applied
+      ? insurance.premium - premiumFromDownPayment
+      : 0;
+
+    const downPaymentUsed = downPaymentFunded - premiumFromDownPayment;
+    const loanAmount = Math.max(0, priceAtPurchase - downPaymentUsed) + premiumFinanced;
 
     /* Either way the same cash leaves the pool. 'capitalized' spends the funded
        down payment and borrows the premium; 'down-payment' spends the reduced
@@ -388,8 +405,15 @@ window.RentVsBuy.model = (function () {
       ownershipCosts += recurringCosts;
 
       /* Income covers this month's housing and the rest is invested. A month
-         that costs more than it brings in is met from the balance instead, which
-         is floored at zero — a negative amount is never invested. */
+         that costs more than it brings in is met from the balance instead; a
+         negative amount is never invested, and whatever the balance cannot
+         cover becomes shortfall.
+
+         The balance itself can still open below zero, when the closing costs
+         alone exhausted the savings at Month B. That debt then compounds at the
+         investment rate, exactly as the shortfall does, and income pays it down
+         before anything is invested. Wealth is investments - shortfall either
+         way, so which of the two carries the debt does not change the answer. */
       const grown = investments * (1 + inputs.postPurchaseMonthlyRate);
       shortfall *= 1 + inputs.postPurchaseMonthlyRate;
       const leftover = inputs.monthlyIncome - payment - recurringCosts;
@@ -530,6 +554,54 @@ window.RentVsBuy.model = (function () {
     };
   }
 
+  // ---------------------------------------------------------- the verdict
+
+  /**
+   * The answer the whole tool exists to give: does buying beat renting, and if
+   * it does, which month is the best one to buy?
+   *
+   * Takes the rent-path outcome and one buy-path outcome per purchase month, all
+   * measured at Month S, and picks the month with the highest final wealth. Ties
+   * go to the earlier month, because waiting longer for the same result is not
+   * worth it. Buying only "wins" if the best month actually beats never buying.
+   */
+  function bestPurchase(rentResult, buyScenarios) {
+    const rentWealth = rentResult.finalWealth;
+    const empty = {
+      rentWealth,
+      buyingWins: false,
+      bestMonth: null,
+      bestWealth: null,
+      margin: 0,
+      winningMonths: 0,
+      lastWinningMonth: null,
+    };
+    if (!buyScenarios || buyScenarios.length === 0) return empty;
+
+    let best = buyScenarios[0];
+    let winningMonths = 0;
+    let lastWinningMonth = null;
+    buyScenarios.forEach(scenario => {
+      // Strictly greater, so the earliest of equally good months is kept.
+      if (scenario.finalWealth > best.finalWealth) best = scenario;
+      if (scenario.finalWealth > rentWealth) {
+        winningMonths += 1;
+        lastWinningMonth = scenario.purchaseMonth;
+      }
+    });
+
+    return {
+      rentWealth,
+      buyingWins: best.finalWealth > rentWealth,
+      bestMonth: best.purchaseMonth,
+      bestWealth: best.finalWealth,
+      // Positive when buying wins, negative when renting does.
+      margin: best.finalWealth - rentWealth,
+      winningMonths,
+      lastWinningMonth,
+    };
+  }
+
   return {
     // Consumed by inputs.js so the FD terms are defined in exactly one place.
     FD_TERM_MONTHS,
@@ -539,5 +611,7 @@ window.RentVsBuy.model = (function () {
     simulateRentPath,
     simulateRentPathAt,
     simulateBuyPath,
+    // The conclusion drawn from a whole sweep of purchase months.
+    bestPurchase,
   };
 })();

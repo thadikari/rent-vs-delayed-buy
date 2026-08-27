@@ -16,11 +16,7 @@
   'use strict';
 
   const { model, inputs, series, seriesControls, lineChart, heatmap, util } = window.RentVsBuy;
-  const { fmtCurrency, sampleMonths, stepForRange } = util;
-
-  /* How many points the wealth chart draws. Enough to look continuous, few
-     enough that a long horizon stays cheap; the step follows from the range. */
-  const CHART_MAX_POINTS = 100;
+  const { fmtCurrency, sampleMonths } = util;
 
   /* Recalculating sweeps the model over the whole heatmap grid, so typing is
      debounced rather than recomputed on every keystroke. */
@@ -44,15 +40,18 @@
   // ------------------------------------------------------------- the main loop
 
   /**
-   * Run the model once per sampled purchase delay B, plus once for the rent path.
+   * Run the model once per purchase month B, plus once for the rent path.
    * Returns the raw results; turning them into chart series happens separately
    * so that re-ticking a box does not re-run any of this.
    */
   function runScenarios(config) {
-    /* A purchase can only happen at or before the sale, so the x-axis runs from
-       today to the sale month. Nothing else bounds it. */
-    const purchaseMonths = sampleMonths(
-      config.saleMonth, stepForRange(config.saleMonth, CHART_MAX_POINTS));
+    /* Every month from today to the sale, with nothing thinned out. The chart's
+       most informative features are one month wide - the insurance premium
+       falling away as the down payment crosses a band, or a fixed-deposit term
+       matching the wait exactly - and sampling every other month hides them, or
+       worse, shifts the apparent dip to a neighbouring month. The cost is one
+       model run per month, which is cheap enough to pay in full. */
+    const purchaseMonths = sampleMonths(config.saleMonth, 1);
 
     return {
       config,
@@ -84,6 +83,59 @@
       data[spec.key] = run.labels.map((_, i) => spec.pick(source(run, i)));
     });
     return data;
+  }
+
+  // -------------------------------------------------------------------- verdict
+
+  /** "in 14 months", "in 1 month", or "now" for a purchase today. */
+  function whenPhrase(month) {
+    if (month === 0) return 'now';
+    return `in ${month} month${month === 1 ? '' : 's'}`;
+  }
+
+  /**
+   * The headline answer, above everything else in the Analysis section: which
+   * path wins, and the best month to buy if buying does. The arithmetic is
+   * model.bestPurchase(); this only phrases it.
+   */
+  function renderVerdict(run) {
+    const box = el('verdict');
+    const headline = el('verdict-headline');
+    const detail = el('verdict-detail');
+    if (!box || !headline || !detail) return;
+
+    const verdict = model.bestPurchase(run.rentResult, run.buyScenarios);
+    const saleMonth = run.config.saleMonth;
+
+    if (verdict.bestMonth === null) {
+      box.className = 'verdict verdict-rent';
+      headline.textContent = 'Nothing to compare yet';
+      detail.textContent = '';
+      return;
+    }
+
+    if (verdict.buyingWins) {
+      box.className = 'verdict verdict-buy';
+      headline.textContent = `Buying ${whenPhrase(verdict.bestMonth)} is the best strategy!`;
+      const parts = [
+        `${fmtCurrency(verdict.margin)} better off by month ${saleMonth} than never buying.`,
+      ];
+      if (verdict.lastWinningMonth > verdict.bestMonth) {
+        parts.push(`Buying still beats renting anywhere up to month ${verdict.lastWinningMonth}.`);
+      }
+      detail.textContent = parts.join(' ');
+      return;
+    }
+
+    box.className = 'verdict verdict-rent';
+    headline.textContent = 'Renting beats buying at every month!';
+    /* Buying at month S means buying and selling on the same day, which is not a
+       strategy anybody would follow, so it is not held up as the closest case. */
+    const behind = fmtCurrency(Math.abs(verdict.margin));
+    detail.textContent = verdict.bestMonth >= saleMonth
+      ? `No purchase month beats renting; even the closest ends ${behind} behind.`
+      : `Buying ${whenPhrase(verdict.bestMonth)} comes closest, and still ends `
+        + `${behind} behind by month ${saleMonth}.`;
   }
 
   // -------------------------------------------------------------- results table
@@ -151,6 +203,7 @@
 
     lastRun = runScenarios(config);
 
+    renderVerdict(lastRun);
     renderChart();
     if (devPanels) heatmap.render(config);
     renderResultsTable(lastRun);

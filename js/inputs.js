@@ -43,8 +43,9 @@ window.RentVsBuy.inputs = (function () {
     return readNumber(id, fallback) / 100;
   }
 
-  function readRadio(name, fallback) {
-    return document.querySelector(`input[name="${name}"]:checked`)?.value || fallback;
+  /** The chosen value of a <select>, or `fallback` if the field is missing. */
+  function readChoice(id, fallback) {
+    return el(id)?.value || fallback;
   }
 
   // -------------------------------------------------------------- the snapshot
@@ -57,7 +58,7 @@ window.RentVsBuy.inputs = (function () {
    * already converted, and `...Rate` for a plain fraction of some amount.
    */
   function readInputs() {
-    const waitingStrategy = readRadio('waiting-strategy', 'fd-plus-etf');
+    const waitingStrategy = readChoice('waiting-strategy', 'etf-only');
     const homeAppreciationAnnual = readPercent('appreciation-rate');
 
     const fdRates = {};
@@ -73,7 +74,7 @@ window.RentVsBuy.inputs = (function () {
       mortgageMonthlyRate: readPercent('interest-rate') / 12,        // APR
       mortgageTermMonths: Math.max(1, readInteger('mortgage-term', 25) * 12),
       purchaseClosingCostRate: readPercent('purchase-closing-cost-percent'),
-      mdInsuranceMode: readRadio('mortgage-insurance-option', 'capitalized'),
+      mdInsuranceMode: readChoice('mortgage-insurance-option', 'capitalized'),
       mdInsuranceCustomRate: readPercent('md-custom-rate'),          // 0 means "use the bands"
 
       // ---- renting, and the income that funds everything
@@ -110,9 +111,9 @@ window.RentVsBuy.inputs = (function () {
 
   // ------------------------------------------------------------ enabled state
 
-  /** Grey out the fixed-deposit controls when no FD is in play. */
+  /** Hide the fixed-deposit controls when no FD is in play. */
   function syncWaitingStrategyState() {
-    const isFdStrategy = readRadio('waiting-strategy', 'fd-plus-etf') === 'fd-plus-etf';
+    const isFdStrategy = readChoice('waiting-strategy', 'etf-only') === 'fd-plus-etf';
     const autoFd = el('auto-fd');
     const section = el('fd-lock-section');
 
@@ -122,30 +123,49 @@ window.RentVsBuy.inputs = (function () {
       // The individual rates only matter when a term can actually be selected.
       if (input) input.disabled = !isFdStrategy || !autoFd?.checked;
     });
-    if (section) {
-      section.classList.toggle('opacity-50', !isFdStrategy);
-      section.style.pointerEvents = isFdStrategy ? 'auto' : 'none';
-    }
+    /* Taken out of the page entirely rather than dimmed: under ETF only there is
+       no fixed deposit to configure, so the controls are noise. They stay
+       disabled as well, so nothing hidden can still be reached by tabbing. */
+    if (section) section.classList.toggle('hidden', !isFdStrategy);
   }
 
-  /** Grey out the insurance rate controls when insurance is switched off. */
+  /** Hide the insurance rate controls when no insurance applies. */
   function syncMortgageInsuranceState() {
-    const enabled = readRadio('mortgage-insurance-option', 'capitalized') !== 'none';
+    const enabled = readChoice('mortgage-insurance-option', 'capitalized') !== 'none';
     const container = el('md-custom-rate-container');
     const note = el('md-rate-bands-note');
     const customRate = el('md-custom-rate');
 
-    if (container) {
-      container.style.opacity = enabled ? '1' : '0.5';
-      container.style.pointerEvents = enabled ? 'auto' : 'none';
-    }
-    if (note) note.style.opacity = enabled ? '1' : '0.5';
+    /* Same treatment as the fixed-deposit controls: with no premium to charge,
+       neither the custom rate nor the table of bands it overrides means
+       anything, so both leave the page rather than sitting there greyed out.
+       The field stays disabled too, so nothing hidden is reachable by tabbing. */
+    if (container) container.classList.toggle('hidden', !enabled);
+    if (note) note.classList.toggle('hidden', !enabled);
     if (customRate) customRate.disabled = !enabled;
+  }
+
+  /**
+   * Show the selected option's own description under a dropdown.
+   *
+   * A <select> cannot carry a second line per option, so each <option> holds its
+   * description in a data attribute and the one that is chosen is echoed into
+   * `<selectId>-note`. The text stays in index.html, next to the option it
+   * describes, rather than being duplicated here.
+   */
+  function syncChoiceNote(selectId) {
+    const select = el(selectId);
+    const note = el(`${selectId}-note`);
+    if (!select || !note) return;
+    const chosen = select.options[select.selectedIndex];
+    note.textContent = chosen?.dataset.description || '';
   }
 
   function syncEnabledState() {
     syncWaitingStrategyState();
     syncMortgageInsuranceState();
+    syncChoiceNote('waiting-strategy');
+    syncChoiceNote('mortgage-insurance-option');
   }
 
   return { readInputs, syncEnabledState };
