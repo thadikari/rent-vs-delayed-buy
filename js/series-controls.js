@@ -9,7 +9,7 @@
  *                and it shows a dash when only some of them are ticked
  *   line box     one per plottable series
  *
- * Rows can also be *unavailable* — the fixed-deposit lines under the ETF-only
+ * The tree groups lines by section, with a section box that goes indeterminate
  * strategy, where the deposit holds nothing. Those are disabled and dimmed
  * rather than removed, so it is clear they exist and why they are off.
  */
@@ -132,8 +132,7 @@ window.RentVsBuy.seriesControls = (function () {
   }
 
   /**
-   * Tick or untick every line at once. Unavailable rows are left alone, so
-   * "plot all" never switches on a fixed-deposit line that holds nothing.
+   * Tick or untick every line at once.
    */
   function setAll(checked) {
     lines.forEach(line => {
@@ -176,33 +175,6 @@ window.RentVsBuy.seriesControls = (function () {
     if (plotNone) plotNone.addEventListener('click', () => setAll(false));
   }
 
-  /**
-   * Mark rows unavailable. `isUnavailable(spec)` is called for every series;
-   * rows it returns true for are disabled, dimmed and excluded from the chart.
-   *
-   * A row going unavailable is also unticked, so a greyed box never appears
-   * ticked while its line is absent from the chart. Its previous state is kept
-   * and restored if the row becomes available again, so switching strategy back
-   * and forth does not lose the selection.
-   */
-  function setAvailability(isUnavailable) {
-    lines.forEach(line => {
-      const off = !!isUnavailable(line.spec);
-      const wasOff = line.input.disabled;
-
-      if (off && !wasOff) {
-        line.rememberedChecked = line.input.checked;
-        line.input.checked = false;
-      } else if (!off && wasOff && line.rememberedChecked !== undefined) {
-        line.input.checked = line.rememberedChecked;
-        line.rememberedChecked = undefined;
-      }
-
-      line.input.disabled = off;
-      line.row.classList.toggle('series-row-disabled', off);
-    });
-    refreshSectionBoxes();
-  }
 
   /* Built from DOM nodes rather than innerHTML, so no text ever needs escaping
      and the panel cannot become a hole in the page. */
@@ -253,5 +225,5 @@ window.RentVsBuy.seriesControls = (function () {
     return keys;
   }
 
-  return { init, setAll, setActive, setAvailability, visibleKeys };
+  return { init, setAll, setActive, visibleKeys };
 })();

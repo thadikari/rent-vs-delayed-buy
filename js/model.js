@@ -61,7 +61,7 @@
  * The inputs carry two kinds of annual rate, and they become monthly rates
  * differently. Mixing them up is a subtle source of error:
  *
- *   APRs — ETF, fixed deposit, post-purchase investment, mortgage interest.
+ *   APRs — savings before the purchase, savings after it, mortgage interest.
  *          Nominal annual rates, quoted the way lenders and banks quote them:
  *              monthly = APR / 12
  *
@@ -75,9 +75,6 @@ window.RentVsBuy.model = (function () {
   'use strict';
 
   // ------------------------------------------------------------------ constants
-
-  /** Fixed-deposit terms the calculator offers, in months. */
-  const FD_TERM_MONTHS = [12, 24, 36, 60];
 
   /** At or above this down-payment share, no default insurance is required. */
   const INSURANCE_FREE_DOWN_PAYMENT_RATIO = 0.20;
@@ -104,6 +101,22 @@ window.RentVsBuy.model = (function () {
     { minDownPaymentRatio: 0, rate: 0.040 },
   ];
 
+  /** Above this price no default insurance is available, so 20% down is the floor. */
+  const INSURABLE_PRICE_CEILING = 1500000;
+
+  /**
+   * The smallest down payment a lender may accept, in Canada: 5% of the first
+   * $500,000, 10% of the part above that, and 20% once the price passes the
+   * insurable ceiling. A purchase with less than this cannot happen at all, which
+   * is a different thing from a purchase that is merely a bad idea.
+   */
+  function minimumDownPayment(price) {
+    if (price <= 0) return 0;
+    if (price > INSURABLE_PRICE_CEILING) return 0.20 * price;
+    if (price > 500000) return 0.05 * 500000 + 0.10 * (price - 500000);
+    return 0.05 * price;
+  }
+
   // -------------------------------------------------------------- rate helpers
 
   /** Monthly equivalent of an effective annual growth rate. See RATE CONVENTIONS. */
@@ -120,99 +133,53 @@ window.RentVsBuy.model = (function () {
     return (loanAmount * monthlyRate * growth) / (growth - 1);
   }
 
-  // --------------------------------------------------------- investment account
-
-  /* An investment account, advanced one month at a time.
-   *
-   * Return accrues every month on the opening balance, but is only *credited*
-   * every `payoutMonths` — and until it is credited it does not itself earn
-   * anything. That is how the ETF payout-frequency input behaves: it shifts when
-   * return is realised without changing the underlying APR. payoutMonths = 1 is
-   * ordinary monthly compounding.
-   */
-  function openAccount(openingBalance, monthlyRate, payoutMonths) {
-    return {
-      balance: openingBalance,
-      accrued: 0,
-      monthlyRate,
-      payoutMonths: Math.max(1, payoutMonths),
-      monthsElapsed: 0,
-    };
-  }
-
-  /**
-   * Advance one month: accrue return on the opening balance, then apply the
-   * month's contribution (negative to withdraw). A contribution lands at the end
-   * of the month, so it earns nothing that month.
-   */
-  function advanceOneMonth(account, contribution) {
-    account.accrued += account.balance * account.monthlyRate;
-    account.balance += contribution;
-    account.monthsElapsed += 1;
-    if (account.monthsElapsed % account.payoutMonths === 0) {
-      account.balance += account.accrued;
-      account.accrued = 0;
-    }
-  }
-
-  /** Balance including return accrued but not yet credited. */
-  function accountValue(account) {
-    return account.balance + account.accrued;
-  }
-
-  /**
-   * Take up to `amount` out of the account, never taking it below zero, and
-   * return what was actually taken.
-   *
-   * Accrued return is credited first, because money being spent has to be in
-   * hand. That slightly accelerates compounding in a month where the account is
-   * drawn on, which only happens when income cannot cover housing.
-   */
-  function spendFromAccount(account, amount) {
-    account.balance += account.accrued;
-    account.accrued = 0;
-    const taken = Math.min(amount, Math.max(0, account.balance));
-    account.balance -= taken;
-    return taken;
-  }
-
-  // ------------------------------------------------------ phase 1: the wait
+  // ------------------------------------------------------------------- savings
 
   /*
-   * While waiting to buy, savings sit in two places:
+   * Savings, in both phases, are one balance earning one rate.
    *
-   *   cash on hand    -> a fixed deposit, if one matches the wait exactly
-   *   monthly savings -> ETFs
+   * The rate is quoted as an APR and applied a twelfth at a time, every month:
+   * the balance grows, then the month's contribution lands (so a contribution
+   * earns nothing in the month it arrives). A negative contribution — a month
+   * that costs more than it brings in — is met from the balance instead, and
+   * whatever the balance cannot cover becomes *shortfall*: housing cost that
+   * neither income nor savings could meet, financed at the same rate and
+   * subtracted from final wealth.
    *
-   * The help text for the FD lock options is explicit that a fixed deposit is
-   * only used when the wait *equals* an offered term, so this is an exact-term
-   * lookup and not a "largest term that fits" search. Returns null when no FD
-   * applies, in which case the caller falls back to the ongoing return.
+   * The balance itself can open below zero, when closing costs alone exhaust the
+   * savings at Month B. That debt compounds at the same rate the shortfall does,
+   * and income pays it down before anything is invested; since wealth is
+   * investments minus shortfall, which of the two carries it makes no difference.
    */
-  function fdRateForHorizon(inputs, horizonMonths) {
-    if (inputs.waitingStrategy !== 'fd-plus-etf' || !inputs.autoFdEnabled) return null;
-    return FD_TERM_MONTHS.includes(horizonMonths) ? inputs.fdRates[horizonMonths] : null;
-  }
+  function runPhase(monthlyRate, openingBalance, months, contributionFor, openingShortfall) {
+    let balance = openingBalance;
+    let shortfall = openingShortfall || 0;
 
-  /** Which monthly rates apply to cash and to monthly savings over a given wait. */
-  function waitingPeriodRates(inputs, horizonMonths) {
-    // "ETF only" means exactly that: one return assumption, no FD split.
-    if (inputs.waitingStrategy === 'etf-only') {
-      return {
-        cashMonthlyRate: inputs.etfMonthlyRate,
-        cashPayoutMonths: inputs.etfPayoutMonths,
-        savingsMonthlyRate: inputs.etfMonthlyRate,
-        savingsPayoutMonths: inputs.etfPayoutMonths,
-      };
+    /* A negative contribution is a month whose housing cost outran the budget.
+       The arithmetic copes - it borrows - but a scenario built on borrowing is
+       one the page has to own up to, so the months are counted here. */
+    let monthsOverBudget = 0;
+    let firstOverBudget = null;
+
+    for (let month = 0; month < months; month++) {
+      const contribution = contributionFor(month);
+      if (contribution < 0) {
+        monthsOverBudget += 1;
+        if (firstOverBudget === null) firstOverBudget = month;
+      }
+      const grown = balance * (1 + monthlyRate);
+      shortfall *= 1 + monthlyRate;                 // last month's gap keeps costing
+
+      if (contribution >= 0) {
+        balance = grown + contribution;
+      } else {
+        const covered = Math.min(-contribution, Math.max(0, grown));
+        balance = grown - covered;
+        shortfall += -contribution - covered;
+      }
     }
-    const fdAnnualRate = fdRateForHorizon(inputs, horizonMonths);
-    return {
-      // No matching FD term: the cash earns the ongoing post-purchase return.
-      cashMonthlyRate: fdAnnualRate === null ? inputs.postPurchaseMonthlyRate : fdAnnualRate / 12,
-      cashPayoutMonths: 1,
-      savingsMonthlyRate: inputs.etfMonthlyRate,
-      savingsPayoutMonths: inputs.etfPayoutMonths,
-    };
+
+    return { investments: balance, shortfall, monthsOverBudget, firstOverBudget };
   }
 
   /** Everything a renter pays in `month` (0-based), rent plus other rental costs. */
@@ -227,55 +194,25 @@ window.RentVsBuy.model = (function () {
    *
    * Shared by both paths: the buy path runs it up to Month B, and the rent path
    * runs it all the way to Month S. That is the only difference between them
-   * before a purchase happens.
-   *
-   * `rateHorizonMonths` is how long the money is committed for, which is what
-   * picks the fixed-deposit term. It is normally the same as `months`, but the
-   * two come apart when reading a renter's balance partway through: a renter who
-   * never buys has locked their deposit until Month S, so their balance at
-   * Month B still earns the S-matched rate.
+   * before a purchase happens — which is why the savings they hold at Month B
+   * are the same number.
    */
-  function runWaitingPhase(inputs, months, rateHorizonMonths = months) {
-    const rates = waitingPeriodRates(inputs, rateHorizonMonths);
-    const cash = openAccount(inputs.cashOnHand, rates.cashMonthlyRate, rates.cashPayoutMonths);
-    const savings = openAccount(0, rates.savingsMonthlyRate, rates.savingsPayoutMonths);
+  function runWaitingPhase(inputs, months) {
     let rentPaid = 0;
-
-    /* Housing cost that neither income nor the savings pot could cover. It is
-       financed at the same rate the money would have earned. */
-    let shortfall = 0;
-
-    for (let month = 0; month < months; month++) {
+    const contributionFor = month => {
       const cost = rentalCostInMonth(inputs, month);
       rentPaid += cost;
-      const leftover = inputs.monthlyIncome - cost;
+      return inputs.monthlyIncome - cost;
+    };
 
-      advanceOneMonth(cash, 0);                    // locked away, no contributions
-      shortfall *= 1 + rates.savingsMonthlyRate;   // last month's gap keeps costing
-
-      /* Only a positive leftover is ever invested. A negative one is met from
-         the pot, and whatever the pot cannot cover becomes shortfall. */
-      advanceOneMonth(savings, Math.max(0, leftover));
-      if (leftover < 0) {
-        shortfall += -leftover - spendFromAccount(savings, -leftover);
-      }
-    }
-
-    const cashValue = accountValue(cash);
-    const savingsValue = accountValue(savings);
-
-    /* Split the pot by the instrument holding it, so the chart can show where the
-       down payment came from. Under 'etf-only' the cash on hand is in ETFs as
-       well, so the fixed deposit holds nothing and the ETF figure covers both.
-       Either way inFixedDeposit + inEtfs === investments. */
-    const usesFixedDeposit = inputs.waitingStrategy === 'fd-plus-etf';
-
+    const phase = runPhase(inputs.waitingMonthlyRate, inputs.cashOnHand, months,
+      contributionFor, 0);
     return {
       rentPaid,
-      inFixedDeposit: usesFixedDeposit ? cashValue : 0,
-      inEtfs: usesFixedDeposit ? savingsValue : cashValue + savingsValue,
-      investments: cashValue + savingsValue,
-      shortfall,
+      investments: phase.investments,
+      shortfall: phase.shortfall,
+      monthsOverBudget: phase.monthsOverBudget,
+      firstOverBudget: phase.firstOverBudget,
     };
   }
 
@@ -376,15 +313,16 @@ window.RentVsBuy.model = (function () {
       inputs.propertyTaxRate + inputs.maintenanceRate + inputs.homeInsuranceRate;
 
     let mortgageBalance = purchase.loanAmount;
-    let investments = purchase.investmentsAfterPurchase;
-    // Carried over from the wait, and still being financed.
-    let shortfall = openingShortfall;
     let interestPaid = 0;
     let principalPaid = 0;
     let ownershipCosts = 0;
     let paymentsMade = 0;
 
-    for (let month = 1; month <= holdMonths; month++) {
+    /* Called once per month, in order, by runPhase. It advances the mortgage and
+       the running costs for that month and hands back what income has left for
+       investing - negative when the month costs more than it brings in. */
+    const contributionFor = index => {
+      const month = index + 1;              // month 1 is the first month owned
       let payment = 0;
       if (mortgageBalance > 0 && month <= inputs.mortgageTermMonths) {
         const interest = mortgageBalance * inputs.mortgageMonthlyRate;
@@ -404,34 +342,20 @@ window.RentVsBuy.model = (function () {
       const recurringCosts = (valueLinkedCostRate * homeValue) / 12 + inputs.utilitiesMonthly;
       ownershipCosts += recurringCosts;
 
-      /* Income covers this month's housing and the rest is invested. A month
-         that costs more than it brings in is met from the balance instead; a
-         negative amount is never invested, and whatever the balance cannot
-         cover becomes shortfall.
+      return inputs.monthlyIncome - payment - recurringCosts;
+    };
 
-         The balance itself can still open below zero, when the closing costs
-         alone exhausted the savings at Month B. That debt then compounds at the
-         investment rate, exactly as the shortfall does, and income pays it down
-         before anything is invested. Wealth is investments - shortfall either
-         way, so which of the two carries the debt does not change the answer. */
-      const grown = investments * (1 + inputs.postPurchaseMonthlyRate);
-      shortfall *= 1 + inputs.postPurchaseMonthlyRate;
-      const leftover = inputs.monthlyIncome - payment - recurringCosts;
-
-      if (leftover >= 0) {
-        investments = grown + leftover;
-      } else {
-        const covered = Math.min(-leftover, Math.max(0, grown));
-        investments = grown - covered;
-        shortfall += -leftover - covered;
-      }
-    }
+    // Opens with whatever savings survived the purchase, which can be negative.
+    const phase = runPhase(inputs.ownershipMonthlyRate, purchase.investmentsAfterPurchase,
+      holdMonths, contributionFor, openingShortfall);
 
     return {
       monthlyPayment,
       mortgageBalance,
-      investments,
-      shortfall,
+      investments: phase.investments,
+      shortfall: phase.shortfall,
+      monthsOverBudget: phase.monthsOverBudget,
+      firstOverBudget: phase.firstOverBudget,
       interestPaid,
       principalPaid,
       ownershipCosts,
@@ -456,7 +380,7 @@ window.RentVsBuy.model = (function () {
    * The rent path: never buys, just rents and invests all the way to Month S.
    *
    * It does not depend on B at all, which is why it plots as a flat reference
-   * line. Its fixed deposit is matched against S, the only horizon it has.
+   * line.
    */
   function simulateRentPath(inputs, saleMonth) {
     const waiting = runWaitingPhase(inputs, saleMonth);
@@ -464,9 +388,11 @@ window.RentVsBuy.model = (function () {
       saleMonth,
       rentPaid: waiting.rentPaid,
       investments: waiting.investments,
-      fdBalance: waiting.inFixedDeposit,
-      etfBalance: waiting.inEtfs,
       shortfall: waiting.shortfall,
+      /* Months where the rent alone outran the budget. The rent path is the
+         benchmark, so if it cannot be afforded neither comparison means much. */
+      monthsOverBudget: waiting.monthsOverBudget,
+      firstOverBudgetMonth: waiting.firstOverBudget,
       // Savings less the housing cost the cash flow could not absorb.
       finalWealth: waiting.investments - waiting.shortfall,
     };
@@ -476,17 +402,15 @@ window.RentVsBuy.model = (function () {
    * The rent path's position partway through, at `month`.
    *
    * Same path as simulateRentPath — this renter never buys — just read earlier.
-   * The deposit stays locked until `saleMonth`, so it earns the S-matched rate
-   * even though the balance is taken at `month`.
+   * `saleMonth` is carried only so the result can say which horizon it belongs
+   * to; nothing before the purchase depends on it.
    */
   function simulateRentPathAt(inputs, month, saleMonth) {
-    const waiting = runWaitingPhase(inputs, month, saleMonth);
+    const waiting = runWaitingPhase(inputs, month);
     return {
       month,
       saleMonth,
       rentPaid: waiting.rentPaid,
-      fdBalance: waiting.inFixedDeposit,
-      etfBalance: waiting.inEtfs,
       investments: waiting.investments,
       shortfall: waiting.shortfall,
     };
@@ -503,6 +427,7 @@ window.RentVsBuy.model = (function () {
     const ownership = runOwnershipPhase(
       inputs, purchase, priceAtPurchase, holdMonths, waiting.shortfall);
     const sale = settleSale(inputs, priceAtSale, ownership.mortgageBalance);
+    const minimumDown = minimumDownPayment(priceAtPurchase);
 
     return {
       purchaseMonth,
@@ -515,10 +440,21 @@ window.RentVsBuy.model = (function () {
       rentPaidDuringWait: waiting.rentPaid,
       investmentsAtPurchase: waiting.investments,
       shortfallAtPurchase: waiting.shortfall,
-      /* How that pot was invested on the way to Month B. These two always sum to
-         investmentsAtPurchase. */
-      fdBalanceAtPurchase: waiting.inFixedDeposit,
-      etfBalanceAtPurchase: waiting.inEtfs,
+
+      /* Could this purchase happen? A down payment below the legal minimum is
+         not a worse deal, it is not a deal: no lender may write it. Months that
+         fail this are left out of the chart and out of the verdict. */
+      minimumDownPayment: minimumDown,
+      purchasePossible: priceAtPurchase > 0
+        && purchase.availableForDownPayment >= minimumDown - 1e-6,
+      downPaymentShortfall: Math.max(0, minimumDown - purchase.availableForDownPayment),
+
+      /* Months of ownership whose housing cost outran the budget, and the first
+         of them counted from today. */
+      monthsOverBudget: ownership.monthsOverBudget,
+      firstOverBudgetMonth: ownership.firstOverBudget === null
+        ? null
+        : purchaseMonth + 1 + ownership.firstOverBudget,
 
       // phase 2 — the purchase
       purchaseClosingCosts: purchase.closingCosts,
@@ -575,13 +511,34 @@ window.RentVsBuy.model = (function () {
       margin: 0,
       winningMonths: 0,
       lastWinningMonth: null,
+      anyPossible: false,
+      impossibleMonths: 0,
+      firstPossibleMonth: null,
+      bothNegative: false,
+      monthsOverBudget: 0,
+      smallestShortfall: 0,
     };
     if (!buyScenarios || buyScenarios.length === 0) return empty;
 
-    let best = buyScenarios[0];
+    /* Only months where the purchase could actually be made are candidates. A
+       month with too small a down payment is not a worse option to be ranked
+       below the others; it is not an option. */
+    const possible = buyScenarios.filter(scenario => scenario.purchasePossible);
+    if (possible.length === 0) {
+      return Object.assign({}, empty, {
+        anyPossible: false,
+        impossibleMonths: buyScenarios.length,
+        firstPossibleMonth: null,
+        // What stopped the closest attempt, for the page to report.
+        smallestShortfall: Math.min.apply(
+          null, buyScenarios.map(scenario => scenario.downPaymentShortfall)),
+      });
+    }
+
+    let best = possible[0];
     let winningMonths = 0;
     let lastWinningMonth = null;
-    buyScenarios.forEach(scenario => {
+    possible.forEach(scenario => {
       // Strictly greater, so the earliest of equally good months is kept.
       if (scenario.finalWealth > best.finalWealth) best = scenario;
       if (scenario.finalWealth > rentWealth) {
@@ -599,12 +556,17 @@ window.RentVsBuy.model = (function () {
       margin: best.finalWealth - rentWealth,
       winningMonths,
       lastWinningMonth,
+      anyPossible: true,
+      impossibleMonths: buyScenarios.length - possible.length,
+      firstPossibleMonth: possible[0].purchaseMonth,
+      // Both paths in the red: the better of the two is only the lesser loss.
+      bothNegative: best.finalWealth < 0 && rentWealth < 0,
+      // The chosen month still has to be lived through.
+      monthsOverBudget: best.monthsOverBudget,
     };
   }
 
   return {
-    // Consumed by inputs.js so the FD terms are defined in exactly one place.
-    FD_TERM_MONTHS,
     // Rate conversion, needed when building the inputs object.
     effectiveMonthlyRate,
     // The model itself.

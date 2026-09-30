@@ -25,7 +25,8 @@ crosses 20% of the price and the mortgage default insurance premium disappears.
 ## What it models
 
 - Rent and other rental costs, each growing at its own rate
-- Cash on hand and monthly savings, in ETFs or in a fixed deposit matching the wait
+- Savings before and after the purchase, each with its own expected APR,
+  compounded monthly
 - Home appreciation to the purchase month and again to the sale
 - CMHC mortgage default insurance bands by down-payment ratio, capitalised or paid in cash
 - Ontario-style closing costs, property tax, maintenance, home insurance and utilities
@@ -38,10 +39,17 @@ and a ten-year hold. Change any of them.
 
 ## Privacy
 
-Everything is calculated in your browser. There is no server, no analytics, no
-cookies and no storage, and nothing you type is transmitted or saved. The page
-loads Tailwind, Chart.js and the GitHub button from CDNs; none of them receive
-your inputs.
+Everything runs in your browser, and anything you save stays on this device.
+Your data is never sent anywhere.
+
+There is no server, no analytics and no cookies, and nothing you type is
+transmitted or logged. Saving an input set writes it to the browser's own local
+storage — up to three sets, readable only by this page on this device, and never
+attached to a network request the way a cookie would be. Delete a set from the
+controls beside the Inputs title, or clear the site's data in your browser.
+
+The page loads Tailwind, Chart.js and the GitHub button from CDNs; none of them
+receive your inputs.
 
 ## Running it locally
 

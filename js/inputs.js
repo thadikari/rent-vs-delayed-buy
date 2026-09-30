@@ -58,13 +58,7 @@ window.RentVsBuy.inputs = (function () {
    * already converted, and `...Rate` for a plain fraction of some amount.
    */
   function readInputs() {
-    const waitingStrategy = readChoice('waiting-strategy', 'etf-only');
     const homeAppreciationAnnual = readPercent('appreciation-rate');
-
-    const fdRates = {};
-    model.FD_TERM_MONTHS.forEach(term => {
-      fdRates[term] = readPercent(`fd-${term}`);
-    });
 
     return {
       // ---- the home and its financing
@@ -86,18 +80,16 @@ window.RentVsBuy.inputs = (function () {
 
       // ---- how the waiting period is invested
       cashOnHand: readNumber('cash-on-hand'),
-      waitingStrategy,                                               // 'fd-plus-etf' | 'etf-only'
-      autoFdEnabled: waitingStrategy === 'fd-plus-etf' && !!el('auto-fd')?.checked,
-      etfMonthlyRate: readPercent('etf-apr') / 12,                   // APR
-      etfPayoutMonths: el('etf-frequency')?.value === 'semiannual' ? 6 : 3,
-      fdRates,                                                       // keyed by term in months
+      // An APR, applied a twelfth at a time, every month.
+      waitingMonthlyRate: readPercent('wait-apr') / 12,
 
       // ---- owning the home, and selling it
       propertyTaxRate: readPercent('property-tax'),                  // all three are shares
       maintenanceRate: readPercent('maintenance-percent'),           // of the home's value,
       homeInsuranceRate: readPercent('home-insurance-percent'),      // charged annually
       utilitiesMonthly: readNumber('utilities-monthly'),
-      postPurchaseMonthlyRate: readPercent('investment-apr') / 12,   // APR
+      // ---- and the same for the savings held after the purchase
+      ownershipMonthlyRate: readPercent('own-apr') / 12,
       sellingCostRate: readPercent('realtor-commission'),
       fixedSellingFees: readNumber('legal-fees'),
 
@@ -111,24 +103,6 @@ window.RentVsBuy.inputs = (function () {
 
   // ------------------------------------------------------------ enabled state
 
-  /** Hide the fixed-deposit controls when no FD is in play. */
-  function syncWaitingStrategyState() {
-    const isFdStrategy = readChoice('waiting-strategy', 'etf-only') === 'fd-plus-etf';
-    const autoFd = el('auto-fd');
-    const section = el('fd-lock-section');
-
-    if (autoFd) autoFd.disabled = !isFdStrategy;
-    model.FD_TERM_MONTHS.forEach(term => {
-      const input = el(`fd-${term}`);
-      // The individual rates only matter when a term can actually be selected.
-      if (input) input.disabled = !isFdStrategy || !autoFd?.checked;
-    });
-    /* Taken out of the page entirely rather than dimmed: under ETF only there is
-       no fixed deposit to configure, so the controls are noise. They stay
-       disabled as well, so nothing hidden can still be reached by tabbing. */
-    if (section) section.classList.toggle('hidden', !isFdStrategy);
-  }
-
   /** Hide the insurance rate controls when no insurance applies. */
   function syncMortgageInsuranceState() {
     const enabled = readChoice('mortgage-insurance-option', 'capitalized') !== 'none';
@@ -136,10 +110,10 @@ window.RentVsBuy.inputs = (function () {
     const note = el('md-rate-bands-note');
     const customRate = el('md-custom-rate');
 
-    /* Same treatment as the fixed-deposit controls: with no premium to charge,
-       neither the custom rate nor the table of bands it overrides means
-       anything, so both leave the page rather than sitting there greyed out.
-       The field stays disabled too, so nothing hidden is reachable by tabbing. */
+    /* With no premium to charge, neither the custom rate nor the table of bands
+       it overrides means anything, so both leave the page rather than sitting
+       there greyed out. The field stays disabled too, so nothing hidden is
+       reachable by tabbing. */
     if (container) container.classList.toggle('hidden', !enabled);
     if (note) note.classList.toggle('hidden', !enabled);
     if (customRate) customRate.disabled = !enabled;
@@ -161,12 +135,56 @@ window.RentVsBuy.inputs = (function () {
     note.textContent = chosen?.dataset.description || '';
   }
 
-  function syncEnabledState() {
-    syncWaitingStrategyState();
-    syncMortgageInsuranceState();
-    syncChoiceNote('waiting-strategy');
-    syncChoiceNote('mortgage-insurance-option');
+  // ------------------------------------------------------- the form verbatim
+
+  /**
+   * Every field in the form as raw strings, keyed by element id.
+   *
+   * This is the whole form rather than the model's view of it, which is what
+   * saving a scenario needs: put the same object back and the form is exactly as
+   * it was, whatever the model later does with those numbers. Enumerated from the
+   * DOM, so a field added to index.html is covered without a change here.
+   */
+  function snapshot() {
+    const values = {};
+    document.querySelectorAll('#calculator-form input[id], #calculator-form select[id]')
+      .forEach(field => {
+        values[field.id] = field.type === 'checkbox' ? field.checked : field.value;
+      });
+    return values;
   }
 
-  return { readInputs, syncEnabledState };
+  /** Put a snapshot back. Ids that no longer exist are skipped. */
+  function restore(values) {
+    Object.keys(values || {}).forEach(id => {
+      const field = el(id);
+      if (!field) return;
+      if (field.type === 'checkbox') field.checked = !!values[id];
+      else field.value = values[id];
+    });
+  }
+
+  /**
+   * Show the chosen setting beside a collapsed section's title.
+   *
+   * The insurance controls sit in a <details> that starts shut, so without this
+   * the page would hide a setting that changes the answer.
+   */
+  function syncCollapsedSummary(selectId, summaryId) {
+    const select = el(selectId);
+    const summary = el(summaryId);
+    if (!select || !summary) return;
+    const chosen = select.options[select.selectedIndex];
+    // A leading space so a screen reader does not run the two together; the
+    // flex gap handles the visual spacing.
+    summary.textContent = chosen?.dataset.summary ? ` (${chosen.dataset.summary})` : '';
+  }
+
+  function syncEnabledState() {
+    syncMortgageInsuranceState();
+    syncChoiceNote('mortgage-insurance-option');
+    syncCollapsedSummary('mortgage-insurance-option', 'md-summary');
+  }
+
+  return { readInputs, syncEnabledState, snapshot, restore };
 })();

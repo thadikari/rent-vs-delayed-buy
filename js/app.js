@@ -15,7 +15,8 @@
 (function () {
   'use strict';
 
-  const { model, inputs, series, seriesControls, lineChart, heatmap, util } = window.RentVsBuy;
+  const { model, inputs, series, seriesControls, lineChart, heatmap, savedInputs, util }
+    = window.RentVsBuy;
   const { fmtCurrency, sampleMonths } = util;
 
   /* Recalculating sweeps the model over the whole heatmap grid, so typing is
@@ -46,10 +47,9 @@
    */
   function runScenarios(config) {
     /* Every month from today to the sale, with nothing thinned out. The chart's
-       most informative features are one month wide - the insurance premium
-       falling away as the down payment crosses a band, or a fixed-deposit term
-       matching the wait exactly - and sampling every other month hides them, or
-       worse, shifts the apparent dip to a neighbouring month. The cost is one
+       most informative feature is one month wide - the insurance premium falling
+       away as the down payment crosses a band - and sampling every other month
+       hides it, or worse, shifts the apparent step to a neighbouring month. The cost is one
        model run per month, which is cheap enough to pay in full. */
     const purchaseMonths = sampleMonths(config.saleMonth, 1);
 
@@ -74,13 +74,24 @@
     buy: (run, i) => run.buyScenarios[i],
   };
 
-  /** Pull one array per visible series out of a completed run. */
+  /**
+   * Pull one array per visible series out of a completed run.
+   *
+   * Buy-path lines are left blank at months where the purchase could not be
+   * made - a down payment below the legal minimum is not a worse deal but no
+   * deal - so the chart breaks there instead of drawing a number for something
+   * that cannot happen.
+   */
   function buildChartData(run, visibleKeys) {
     const data = {};
     series.all().forEach(spec => {
       if (!visibleKeys.has(spec.key)) return;
       const source = SOURCES[spec.from];
-      data[spec.key] = run.labels.map((_, i) => spec.pick(source(run, i)));
+      data[spec.key] = run.labels.map((_, i) => {
+        const scenario = source(run, i);
+        if (spec.from === 'buy' && !scenario.purchasePossible) return null;
+        return spec.pick(scenario);
+      });
     });
     return data;
   }
@@ -93,10 +104,19 @@
     return `in ${month} month${month === 1 ? '' : 's'}`;
   }
 
+  /** "month 14", or "today" for month zero. */
+  function monthPhrase(month) {
+    return month === 0 ? 'today' : `month ${month}`;
+  }
+
   /**
-   * The headline answer, above everything else in the Analysis section: which
-   * path wins, and the best month to buy if buying does. The arithmetic is
-   * model.bestPurchase(); this only phrases it.
+   * The headline answer, above everything else in the Analysis section.
+   *
+   * It carries three kinds of news, in order of how much they matter: a
+   * purchase that cannot legally happen at all, a comparison between two
+   * outcomes that both lose money, and - the ordinary case - which path wins and
+   * when. Anything the numbers cannot support is said plainly rather than
+   * dressed up as an answer.
    */
   function renderVerdict(run) {
     const box = el('verdict');
@@ -106,14 +126,52 @@
 
     const verdict = model.bestPurchase(run.rentResult, run.buyScenarios);
     const saleMonth = run.config.saleMonth;
+    const rent = run.rentResult;
+    const notes = [];
 
-    if (verdict.bestMonth === null) {
-      box.className = 'verdict verdict-rent';
-      headline.textContent = 'Nothing to compare yet';
-      detail.textContent = '';
+    /* The rent path is the benchmark. If the rent alone outruns the budget the
+       whole comparison rests on borrowing, so that is said first. */
+    if (rent.monthsOverBudget > 0) {
+      notes.push(`Rent is more than your monthly budget from ${monthPhrase(rent.firstOverBudgetMonth)}`
+        + `, so the rent path only balances by borrowing.`);
+    }
+
+    // ---- nothing could be bought at any month
+    if (!verdict.anyPossible) {
+      box.className = 'verdict verdict-warn';
+      headline.textContent = 'No purchase is possible with these numbers';
+      const short = verdict.smallestShortfall;
+      detail.textContent = [
+        `The down payment never reaches the legal minimum: at the closest month it is still `
+        + `${fmtCurrency(short)} short.`,
+        'Canada requires 5% of the first $500,000 and 10% of the rest, and 20% above $1.5M.',
+      ].concat(notes).join(' ');
       return;
     }
 
+    const gapNote = verdict.firstPossibleMonth > 0
+      ? `Buying is only possible from month ${verdict.firstPossibleMonth}; before that the down `
+        + `payment is below the legal minimum, which is why the line starts there.`
+      : null;
+    if (gapNote) notes.push(gapNote);
+    if (verdict.monthsOverBudget > 0) {
+      notes.push(`At that month the housing cost is over your budget for `
+        + `${verdict.monthsOverBudget} of the months you own, which the model covers by borrowing.`);
+    }
+
+    // ---- both paths lose money, so the "winner" is only the smaller loss
+    if (verdict.bothNegative) {
+      box.className = 'verdict verdict-warn';
+      headline.textContent = 'Both paths lose money here';
+      detail.textContent = [
+        `Buying ${whenPhrase(verdict.bestMonth)} ends at ${fmtCurrency(verdict.bestWealth)} and never `
+        + `buying at ${fmtCurrency(verdict.rentWealth)}, so this is a choice between two losses, `
+        + 'not a recommendation.',
+      ].concat(notes).join(' ');
+      return;
+    }
+
+    // ---- the ordinary answer
     if (verdict.buyingWins) {
       box.className = 'verdict verdict-buy';
       headline.textContent = `Buying ${whenPhrase(verdict.bestMonth)} is the best strategy!`;
@@ -123,19 +181,18 @@
       if (verdict.lastWinningMonth > verdict.bestMonth) {
         parts.push(`Buying still beats renting anywhere up to month ${verdict.lastWinningMonth}.`);
       }
-      detail.textContent = parts.join(' ');
+      detail.textContent = parts.concat(notes).join(' ');
       return;
     }
 
     box.className = 'verdict verdict-rent';
     headline.textContent = 'Renting beats buying at every month!';
-    /* Buying at month S means buying and selling on the same day, which is not a
-       strategy anybody would follow, so it is not held up as the closest case. */
     const behind = fmtCurrency(Math.abs(verdict.margin));
-    detail.textContent = verdict.bestMonth >= saleMonth
+    const closest = verdict.bestMonth >= saleMonth
       ? `No purchase month beats renting; even the closest ends ${behind} behind.`
-      : `Buying ${whenPhrase(verdict.bestMonth)} comes closest, and still ends `
-        + `${behind} behind by month ${saleMonth}.`;
+      : `Buying ${whenPhrase(verdict.bestMonth)} comes closest, and still ends ${behind} behind `
+        + `by month ${saleMonth}.`;
+    detail.textContent = [closest].concat(notes).join(' ');
   }
 
   // -------------------------------------------------------------- results table
@@ -196,14 +253,11 @@
 
     const config = inputs.readInputs();
 
-    /* With no fixed deposit in the strategy, the FD lines would be flat zero, so
-       their tick boxes are disabled rather than silently plotting nothing. */
-    seriesControls.setAvailability(
-      spec => spec.fdOnly && config.waitingStrategy !== 'fd-plus-etf');
-
     lastRun = runScenarios(config);
 
     renderVerdict(lastRun);
+    // Whether the save controls belong on screen depends on the current values.
+    savedInputs.refresh();
     renderChart();
     if (devPanels) heatmap.render(config);
     renderResultsTable(lastRun);
@@ -283,6 +337,12 @@
       });
       heatmap.init('bsHeatmap', 'heatmap-note');
     }
+    /* Before anything else touches the form, so the values it ships with become
+       the baseline for "has this been edited". */
+    savedInputs.init({
+      container: 'saved-inputs',
+      onLoad: recalculateAndRender,
+    });
     wireInputs();
     wireDetailsToggle();
     wireResize();

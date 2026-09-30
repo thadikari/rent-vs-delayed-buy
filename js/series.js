@@ -16,11 +16,10 @@
  *   pick    pulls the number out of that result
  *   dash    draw dashed (used for a line that should sit on top of another)
  *   width   line width, for emphasising a headline answer
- *   fdOnly  only meaningful when a fixed deposit is in play; disabled otherwise
  *   defaultOn  ticked when the page loads; everything else starts unticked
  *
  * Colour is assigned by section — greens for the rent path, purples for house
- * value, ambers for the wait, roses for the purchase, greys for the mortgage,
+ * value, roses for the purchase, greys for the mortgage,
  * blues for ownership — so a line's family tells you which section it belongs
  * to. The one exception is the insurance premium, kept pink inside the grey
  * mortgage group because it is a fee rather than a balance.
@@ -49,8 +48,8 @@ window.RentVsBuy.series = (function () {
           description: 'What you are worth at month S if you never buy: cash on hand plus every '
             + 'month of leftover income, invested throughout. It does not depend on when '
             + 'you would have bought, so it plots flat - it is the benchmark the buy path '
-            + 'has to beat. The rent-path section below breaks the same figure into its '
-            + 'fixed-deposit and ETF parts.',
+            + 'has to beat. The rent-path section below shows the rent behind it and the '
+            + 'savings it builds.',
           label: 'Rent path: total wealth at month S (never buying)',
           color: 'rgb(5,150,105)',
           width: 3,
@@ -78,8 +77,8 @@ window.RentVsBuy.series = (function () {
       id: 'rent-path',
       title: 'Rent path: rental costs and savings',
       note: 'Never buys, so no purchase month applies: each point shows where the '
-        + 'renter stands at that month on the x-axis. Any fixed deposit stays locked '
-        + 'until month S, which is what sets its rate.',
+        + 'renter stands at that month on the x-axis. Until a purchase happens the buy '
+        + 'path stands in exactly the same place.',
       series: [
         {
           key: 'rentOnlyRentPaidToB',
@@ -94,41 +93,14 @@ window.RentVsBuy.series = (function () {
           pick: r => r.rentPaid,
         },
         {
-          key: 'rentFdAtB',
-          description: 'The cash on hand you start with, grown to that month inside a fixed deposit '
-            + 'that stays locked until the sale at month S. It compounds at the FD rate for '
-            + 'the term equal to S, or at the investment return after purchase when no '
-            + 'offered term matches S. Nothing is ever paid in or taken out, so it only '
-            + 'grows. Add the ETF line to get the renter\'s total savings. ' 
-            + 'Unavailable under the ETF-only strategy, where the deposit holds nothing.',
-          label: 'Savings in FDs so far, locked till month S',
-          color: 'rgb(134,239,172)',
-          from: 'rentAtB',
-          fdOnly: true,
-          pick: r => r.fdBalance,
-        },
-        {
-          key: 'rentEtfAtB',
-          description: 'What the renter\'s monthly savings are worth at that month. Each month '
-            + 'contributes income minus rent and other rental costs at the ETF APR, '
-            + 'credited at the chosen payout frequency. A month that costs more than it '
-            + 'brings in is taken out of this balance instead of a negative amount being '
-            + 'invested, and the balance never goes below zero. Identical to the buy path\'s '
-            + 'ETF line, because the ETF account does not depend on when you buy.',
-          label: 'Savings in ETFs so far (never buying)',
-          color: 'rgb(34,197,94)',
-          from: 'rentAtB',
-          pick: r => r.etfBalance,
-        },
-        {
           key: 'rentSavingsAtB',
-          description: 'Everything the renter holds at that month: the fixed-deposit balance plus the '
-            + 'ETF balance, so it is the sum of the two lines above. Compare it with the '
-            + 'buy path\'s total at month B — the two differ only through the deposit rate, '
-            + 'because the renter\'s deposit is locked to month S while the buyer\'s matches '
-            + 'month B.',
-          label: 'Total savings so far (never buying, FD + ETF)',
+          description: 'Cash on hand plus every month of income the rent left, compounded at the '
+            + 'waiting-period APR. Both paths hold exactly this until a purchase happens, so it '
+            + 'is also the pot the buy path spends at month B: the purchase section below splits '
+            + 'this same number into the closing costs and the down payment.',
+          label: 'Total savings so far (the same on both paths until you buy)',
           color: 'rgb(21,128,61)',
+          width: 2,
           from: 'rentAtB',
           pick: r => r.investments,
         },
@@ -164,52 +136,6 @@ window.RentVsBuy.series = (function () {
       ],
     },
     {
-      id: 'waiting-period',
-      title: 'Buy path: waiting period investments',
-      note: 'Each point is the case where you buy at that month, so B = the x-axis month. '
-        + 'Saving from today up to the purchase at month B. The deposit is '
-        + 'matched to month B, because the money is needed then.',
-      series: [
-        {
-          key: 'buyFdAtB',
-          description: 'The cash on hand grown to the purchase, in a deposit chosen to match the '
-            + 'wait itself. It uses the FD rate for the term exactly equal to B (12, 24, 36 '
-            + 'or 60 months) and otherwise falls back to the investment return after '
-            + 'purchase. It parts from the rent path\'s deposit line only at those matching '
-            + 'months, because the renter\'s deposit is locked to month S instead. ' 
-            + 'Unavailable under the ETF-only strategy, where the deposit holds nothing.',
-          label: 'Savings in FDs at month B, matched to month B',
-          color: 'rgb(252,211,77)',
-          from: 'buy',
-          fdOnly: true,
-          pick: s => s.fdBalanceAtPurchase,
-        },
-        {
-          key: 'buyEtfAtB',
-          description: 'The buyer\'s monthly savings at the moment of purchase: income minus rent and '
-            + 'other rental costs, invested each month at the ETF APR. A month whose costs '
-            + 'exceed income is drawn from this balance rather than invested as a negative '
-            + 'amount, and the balance is floored at zero. It is the same line as the rent '
-            + 'path\'s ETF balance, since the ETF account does not depend on the horizon.',
-          label: 'Savings in ETFs at month B (buying at B)',
-          color: 'rgb(245,158,11)',
-          from: 'buy',
-          pick: s => s.etfBalanceAtPurchase,
-        },
-        {
-          key: 'buySavingsAtB',
-          description: 'The whole pot available when you buy: the fixed-deposit balance plus the ETF '
-            + 'balance at month B. This is what the purchase draws on — closing costs come '
-            + 'out of it first, then the down payment. The purchase section splits exactly '
-            + 'this amount into those two parts.',
-          label: 'Total savings at month B (buying at B, FD + ETF)',
-          color: 'rgb(180,83,9)',
-          from: 'buy',
-          pick: s => s.investmentsAtPurchase,
-        },
-      ],
-    },
-    {
       id: 'purchase',
       title: 'Buy path: the purchase at month B',
       note: 'Each point is the case where you buy at that month, so B = the x-axis month. '
@@ -223,7 +149,7 @@ window.RentVsBuy.series = (function () {
           description: 'What is left for a down payment once the closing costs are paid: total '
             + 'savings at month B minus those costs. This is raw arithmetic, so it can '
             + 'exceed the house price or fall below zero. Add the closing-costs line and '
-            + 'you get total savings at month B exactly.',
+            + 'you get the savings pot at month B exactly.',
           label: 'Down payment available at month B',
           color: 'rgb(225,29,72)',
           from: 'buy',
@@ -247,11 +173,11 @@ window.RentVsBuy.series = (function () {
              pot by definition, so the two lines coincide. */
           key: 'purchaseTotal',
           description: 'The two lines above added together, drawn dashed so you can watch it land '
-            + 'exactly on top of "total savings at month B". It is a check rather than new '
+            + 'exactly on top of "total savings so far". It is a check rather than new '
             + 'information: down payment available plus closing costs is the savings pot by '
             + 'definition. If it ever parted from the solid line, the purchase arithmetic '
             + 'would be wrong.',
-          label: 'Down payment + closing costs (= total savings at month B, buying at B)',
+          label: 'Down payment + closing costs (= total savings at month B)',
           color: 'rgb(159,18,57)',
           dash: [6, 4],
           from: 'buy',
@@ -350,13 +276,14 @@ window.RentVsBuy.series = (function () {
         + 'Owning the home from month B to month S, then selling.',
       series: [
         {
-          /* This account earns the "investment return after purchase", not the
-             ETF APR, so it is not labelled as ETFs. */
+          /* Governed by the post-purchase APR, which is usually lower than the
+             one used while waiting. */
           key: 'investmentsAtS',
           description: 'The investment account from the purchase through to the sale, valued at '
             + 'month S. It opens with whatever savings survived the purchase, then each '
             + 'month adds income minus the mortgage payment and the running costs at the '
-            + 'investment return after purchase. A month that costs more than it brings '
+            + 'APR set for savings after the purchase. A month that costs more than it '
+            + 'brings '
             + 'in is met from the balance instead. It starts below zero when the closing '
             + 'costs alone exhausted the savings, and that debt is carried at the same '
             + 'rate. Add the cash left after selling to get total wealth if selling.',

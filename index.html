@@ -6,6 +6,9 @@
   <title>Rent vs Buy Calculator (Canada): Best Month to Buy a Home</title>
   <meta name="description" content="Compare renting with buying later. Tests every purchase month with CMHC insurance rules and Ontario costs, then names the best month to buy." />
   <link rel="canonical" href="https://thadikari.github.io/rent-vs-delayed-buy/" />
+  <!-- Explicit, because a project page on github.io is not at the domain root,
+       where the browser would look for /favicon.ico by itself. -->
+  <link rel="icon" href="favicon.ico" sizes="any" />
   <meta name="author" content="Tharindu Adikari" />
 
   <!-- Link previews on social sites and chat apps. -->
@@ -129,6 +132,7 @@
   </style>
 </head>
 <body class="bg-gray-50 text-gray-900 font-sans">
+
   <div class="container mx-auto px-4 py-8 max-w-7xl">
     <header class="text-center mb-8">
       <div class="flex justify-center mb-4">
@@ -138,9 +142,9 @@
         </div>
       </div>
       <h1 class="text-4xl font-extrabold text-blue-700 mb-2">Rent vs Delayed Buy — Optimal Home Purchase Timing Calculator</h1>
-      <p class="text-lg text-gray-600">This tool evaluates whether buying now or waiting to accumulate a larger down payment is better for your overall wealth.</p>
-      <p class="mt-3 text-sm text-gray-600">Both paths get the same monthly budget, and each pays its own housing costs out of it. Nothing is counted twice, so the two totals compare directly.</p>
-      <p class="mt-2 text-sm text-gray-400" title="There is no server and no analytics: the model runs in JavaScript in this page, and nothing you type is transmitted, saved or logged. The only network requests the page makes are for the Tailwind, Chart.js and GitHub-button scripts, which never see your inputs.">Everything runs in your browser. Your data is never sent anywhere or saved.</p>
+      <p class="text-lg text-gray-600">Is it better to keep renting, or to buy? And if buying, should you buy now or wait and save a larger down payment first?</p>
+      <p class="mt-2 text-lg text-gray-600">Both questions come down to your total wealth at the sale month. Both paths get the same monthly budget, and each pays its own housing costs out of it.</p>
+      <p class="mt-2 text-sm text-gray-400" title="There is no server and no analytics: the model runs in JavaScript in this page, and nothing you type is transmitted or logged. Saved input sets go to this browser's local storage, never to a cookie. The only network requests are for the Tailwind, Chart.js and GitHub-button scripts.">Everything runs in your browser, and anything you save stays on this device. Your data is never sent anywhere.</p>
   
       <div class="mt-6 section-card max-w-4xl mx-auto">
         <div class="flex flex-col md:flex-row items-stretch gap-3">
@@ -157,7 +161,7 @@
           <div class="flex-1 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-left">
             <div class="text-xs uppercase tracking-wide text-emerald-700 font-semibold">Month S</div>
             <div class="text-sm font-semibold text-gray-900">You sell</div>
-            <div class="text-sm text-gray-700">The house has appreciated again, and both paths are measured here</div>
+            <div class="text-sm text-gray-700">The house has appreciated again, and buy and rent paths are compared here</div>
           </div>
         </div>
 
@@ -180,7 +184,12 @@
 
     <div class="space-y-6">
       <div class="section-card">
-        <h2 class="text-2xl font-bold mb-5">Inputs</h2>
+        <div class="flex items-center justify-between gap-4 mb-5 flex-wrap">
+          <h2 class="text-2xl font-bold">Inputs</h2>
+          <!-- Save/load/delete controls, drawn by saved-inputs.js only when
+               the form has been edited or something is already saved. -->
+          <div id="saved-inputs" class="saved-inputs"></div>
+        </div>
         <form id="calculator-form" class="space-y-6">
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div class="space-y-6">
@@ -189,21 +198,21 @@
                 <p class="text-sm text-gray-600">These assumptions estimate the cost of renting while you wait to buy. They are used to compare the buy-and-sell path against continuing to rent through Month S.</p>
                 <div class="space-y-1.5">
                   <label class="field-label">Monthly rent during waiting period ($/Mo)</label>
-                  <input id="monthly-rent" type="number" value="3100" class="input-field" title="Estimated monthly rent you would pay during the waiting period if you do not buy yet. This contributes to the rent-only comparison over the full sale Month S period." />
+                  <input id="monthly-rent" type="number" value="2700" class="input-field" title="Rent for a home comparable to the one you would buy. Both paths pay it every month until the purchase; the rent path keeps paying it all the way to Month S." />
                 </div>
                 <div class="space-y-1.5">
                   <label class="field-label">Rent increase (%/Yr)</label>
-                  <input id="rent-increase" type="number" value="2.5" step="0.01" class="input-field" title="Annual rent growth used to project rising rental costs over time for the rent-only comparison through Month S." />
+                  <input id="rent-increase" type="number" value="2.5" step="0.01" class="input-field" title="How fast the rent grows each year. It applies to both paths for as long as they are renting." />
                 </div>
  
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                   <div class="flex flex-col">
                     <label class="field-label mb-0.5 min-h-[2.25rem]">Other rental costs ($/Yr)</label>
-                    <input id="rental-insurance-annual" type="number" value="300" class="input-field" title="Estimated annual non-rent rental costs such as renter's insurance, condo fees, or other recurring rental expenses. These are treated as fixed annual amounts and increase with inflation over time." />
+                    <input id="rental-insurance-annual" type="number" value="300" class="input-field" title="Non-rent costs of renting, such as tenant insurance or condo fees, as a yearly total. Charged monthly and grown at the rate beside it." />
                   </div>
                   <div class="flex flex-col">
                     <label class="field-label mb-0.5 min-h-[2.25rem]">Other rental cost increase (%/Yr)</label>
-                    <input id="rental-insurance-increase" type="number" value="2.5" step="0.01" class="input-field" title="Annual increase for other recurring rental costs such as insurance, condo fees, or similar expenses." />
+                    <input id="rental-insurance-increase" type="number" value="2.5" step="0.01" class="input-field" title="How fast those other rental costs grow each year." />
                   </div>
                 </div>
               </div>
@@ -213,45 +222,45 @@
                 <p class="text-sm text-gray-600">These inputs define the target home and the financing terms. The stated price is treated as today's value, then the calculator grows it over time until Month B and again until Month S.</p>
                 <div class="space-y-1.5">
                   <label class="field-label">Target house price ($)</label>
-                  <input id="home-price" type="number" value="700000" class="input-field" title="Enter the house price you want to buy at today. The calculator grows this price over time until Month B for the purchase price and until Month S for the selling price." />
+                  <input id="home-price" type="number" value="700000" class="input-field" title="What the home costs today. It is grown at the appreciation rate to Month B for the purchase price, and to Month S for the sale price." />
                 </div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div class="flex flex-col">
                     <label class="field-label mb-0.5 min-h-[2.25rem]">Home appreciation (%/Yr)</label>
-                    <input id="appreciation-rate" type="number" value="4.5" step="0.01" class="input-field" title="Annual home appreciation used to grow the house value from today to Month B for purchase and from Month B to Month S for the sale." />
+                    <input id="appreciation-rate" type="number" value="4.5" step="0.01" class="input-field" title="How fast the home's value grows each year. It sets the price you pay at Month B, the price you sell at, and the running costs that scale with value." />
                   </div>
                   <div class="flex flex-col">
                     <label class="field-label mb-0.5 min-h-[2.25rem]">Mortgage interest (%/Yr)</label>
-                    <input id="interest-rate" type="number" value="4.5" step="0.01" class="input-field" title="Annual mortgage rate used to estimate the monthly loan payment and remaining balance over the holding period ending at Month S." />
+                    <input id="interest-rate" type="number" value="4.5" step="0.01" class="input-field" title="The mortgage rate, used for the monthly payment and the outstanding balance. It is held for the whole amortisation, so renewing at a different rate is not modelled." />
                   </div>
                 </div>
                 <div class="space-y-1.5">
                   <label class="field-label">Mortgage term (years)</label>
-                  <input id="mortgage-term" type="number" value="25" class="input-field" title="The amortization period of the mortgage, which affects the monthly payment and payoff timeline through the sale at Month S. The full term starts at the purchase in Month B, so delaying the purchase does not shorten it." />
+                  <input id="mortgage-term" type="number" value="25" class="input-field" title="The amortisation period. It starts at the purchase, so waiting does not shorten it, and payments stop if it ends before Month S." />
                 </div>
                 <div class="mt-3 border-t pt-3">
                   <div class="space-y-1.5">
                     <label class="field-label">Purchase closing costs (% of purchase price)</label>
-                    <input id="purchase-closing-cost-percent" type="number" value="2.0" step="0.01" class="input-field" title="Estimated all-in buyer closing costs expressed as a percentage of the purchase price. Typical examples include land transfer tax, legal fees, title/registration, inspection, appraisal, and other buyer-side closing charges." />
+                    <input id="purchase-closing-cost-percent" type="number" value="2.0" step="0.01" class="input-field" title="Buyer's closing costs as a share of the purchase price: land transfer tax, legal, title, inspection. Paid out of savings before anything goes to the down payment." />
                   </div>
   
-                  <div class="mt-3 border-t pt-3">
-                    <h4 class="text-sm font-semibold">Mortgage Default Insurance</h4>
+                  <details id="md-section" class="mt-3 border-t pt-3">
+                    <summary class="collapsible-summary text-sm font-semibold">Mortgage Default Insurance<span id="md-summary" class="collapsible-state"></span></summary>
                     <p class="text-xs text-gray-600">If your down payment is below 20%, most lenders require mortgage default insurance. Choose how you want the premium to be handled. If you leave the custom rate at 0%, the calculator uses a conservative default band based on your down-payment percentage.</p>
-                    <select id="mortgage-insurance-option" class="input-field mt-2" title="How the default insurance premium is handled when the down payment is below 20%.">
-                      <option value="capitalized" data-description="The premium is rolled into the loan, so it keeps more cash available at purchase but increases the loan balance and the monthly payment.">Apply insurance, add the premium to the mortgage</option>
-                      <option value="down-payment" data-description="The premium comes out of the down payment instead. Less goes into the house, so you end up owing exactly the same as rolling it into the loan - only the reported down payment differs.">Apply insurance, pay the premium from the down payment</option>
-                      <option value="none" data-description="Assumes a down payment of 20% or more, or that insurance is not required. No premium is charged at any purchase month.">Do not apply mortgage default insurance</option>
+                    <select id="mortgage-insurance-option" class="input-field mt-2" title="How the premium is handled when the down payment is below 20%. The first two leave you owing exactly the same; only the down payment they report differs.">
+                      <option value="capitalized" data-summary="premium added to the mortgage" data-description="The premium is rolled into the loan, so it keeps more cash available at purchase but increases the loan balance and the monthly payment.">Apply insurance, add the premium to the mortgage</option>
+                      <option value="down-payment" data-summary="premium paid from the down payment" data-description="The premium comes out of the down payment instead. Less goes into the house, so you end up owing exactly the same as rolling it into the loan - only the reported down payment differs.">Apply insurance, pay the premium from the down payment</option>
+                      <option value="none" data-summary="not applied" data-description="Assumes a down payment of 20% or more, or that insurance is not required. No premium is charged at any purchase month.">Do not apply mortgage default insurance</option>
                     </select>
                     <div id="mortgage-insurance-option-note" class="text-xs text-gray-600 mt-1"></div>
                     <div id="md-custom-rate-container" class="mt-3 pt-2 border-t">
                       <label class="field-label">Custom default insurance rate (% of loan, 0 to auto)</label>
-                      <input id="md-custom-rate" type="number" value="0" step="0.01" class="input-field" title="Set a custom mortgage default insurance premium as a percent of the loan. Enter 0 to use the auto banded estimate." />
+                      <input id="md-custom-rate" type="number" value="0" step="0.01" class="input-field" title="Override the premium with a rate of your own, charged on the amount borrowed before the premium is added. Leave it at 0 to use the CMHC bands below." />
                     </div>
                     <div id="md-rate-bands-note" class="mt-2 text-xs text-gray-600">
                       CMHC rates used when custom = 0: DP &lt;5% → 4.00% (not insurable in practice) | DP 5–9.99% → 4.00% | DP 10–14.99% → 3.10% | DP 15–19.99% → 2.80% | DP ≥20% → 0%. Ontario also charges 8% PST on the premium at closing, which this calculator does not include.
                     </div>
-                  </div>
+                  </details>
                 </div>
               </div>
             </div>
@@ -262,63 +271,15 @@
                 <p class="text-sm text-gray-600">This is the money that keeps accumulating until Month B and continues compounding through Month B. It becomes the down payment pool used for the purchase at Month B.</p>
                 <div class="space-y-1.5">
                   <label class="field-label">Current cash on hand ($)</label>
-                  <input id="cash-on-hand" type="number" value="70000" class="input-field" title="Cash available today that you can invest and later use as part of the down payment at Month B." />
+                  <input id="cash-on-hand" type="number" value="110000" class="input-field" title="Savings you have today. It earns the APR below until the purchase, then pays the closing costs and the down payment." />
                 </div>
                 <div class="space-y-1.5">
                   <label class="field-label">Monthly income available for housing + savings ($/Mo)</label>
-                  <input id="monthly-income" type="number" value="6500" class="input-field" title="Take-home pay minus every non-housing living cost - groceries, transport, phone, childcare, debt payments and the rest. What is left is the pot this calculator works with: each month it pays that month's housing cost out of it (rent while renting, then the mortgage payment plus property tax, maintenance, insurance and utilities after buying) and invests the remainder. Do not enter your whole pay cheque - there are no other expense inputs, so anything left in here is treated as money you could save. A month whose housing cost exceeds it draws the investment balance down instead." />
+                  <input id="monthly-income" type="number" value="5500" class="input-field" title="Take-home pay less every non-housing living cost, so what is left for housing and saving. Each month the housing cost comes out of it and the rest is invested. There are no other expense inputs, so do not enter your whole pay cheque." />
                 </div>
                 <div class="space-y-1.5">
-                  <label class="field-label">Waiting-period investment strategy</label>
-                  <select id="waiting-strategy" class="input-field" title="How the waiting-period savings are invested.">
-                    <option value="etf-only" data-description="Use one investment return assumption for all waiting-period savings, without the FD split.">ETF only</option>
-                    <option value="fd-plus-etf" data-description="Keep the cash on hand in the fixed deposit whose term matches the wait, and invest the monthly savings in ETFs.">FD + ETF mix</option>
-                  </select>
-                  <div id="waiting-strategy-note" class="text-xs text-gray-600"></div>
-                </div>
- 
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div class="flex flex-col">
-                    <label class="field-label mb-0.5 min-h-[2.25rem]">ETF expected APR (%/Yr)</label>
-                    <input id="etf-apr" type="number" value="6.0" step="0.01" class="input-field" title="Expected annual return for ETFs purchased from monthly savings. Payout frequency is modeled but APR drives long-term return." />
-                  </div>
-                  <div class="flex flex-col">
-                    <label class="field-label mb-0.5 min-h-[2.25rem]">ETF payout frequency</label>
-                    <select id="etf-frequency" class="input-field" title="Distribution frequency for ETFs bought with monthly savings. This affects payout timing rather than long-term APR in the current model.">
-                      <option value="quarterly">Quarterly (4x/year)</option>
-                      <option value="semiannual">Semi-annual (2x/year)</option>
-                    </select>
-                  </div>
-                </div>
- 
-                <div id="fd-lock-section" class="mt-3 border-t pt-3">
-                  <h4 class="text-sm font-semibold">Fixed-deposit lock options</h4>
-                  <p class="text-xs text-gray-600">If you can lock waiting-period savings into a fixed deposit matching the wait length (e.g., 24 months → 2-year FD), the waiting-period APR can differ from the ongoing investment APR. Enable auto-select to use the FD rate when B matches a term.</p>
-                  <div class="flex items-center gap-3 mt-2">
-                    <input id="auto-fd" type="checkbox" checked class="checkbox-field" title="When checked, if Month B equals an available FD term (12, 24, 36 or 60 months), that FD APR is used for the waiting-period cash. If Month B matches no term, the cash earns the investment return after purchase instead." />
-                    <div>
-                      <label class="field-label" style="margin-bottom:0">Auto-select FD by matching B</label>
-                      <div class="text-xs text-gray-600">If the purchase delay matches a known fixed-deposit term, the calculator will use that FD rate for the waiting-period cash.</div>
-                    </div>
-                  </div>
-                  <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2 text-sm">
-                    <div class="flex flex-col">
-                      <label class="field-label mb-1 min-h-[2.5rem]">1-year FD APR (%/Yr)</label>
-                      <input id="fd-12" type="number" value="3.50" step="0.01" class="input-field" title="Estimated 1-year fixed deposit APR (default current market)." />
-                    </div>
-                    <div class="flex flex-col">
-                      <label class="field-label mb-1 min-h-[2.5rem]">2-year FD APR (%/Yr)</label>
-                      <input id="fd-24" type="number" value="3.45" step="0.01" class="input-field" title="Estimated 2-year fixed deposit APR (default current market)." />
-                    </div>
-                    <div class="flex flex-col">
-                      <label class="field-label mb-1 min-h-[2.5rem]">3-year FD APR (%/Yr)</label>
-                      <input id="fd-36" type="number" value="3.40" step="0.01" class="input-field" title="Estimated 3-year fixed deposit APR (default current market)." />
-                    </div>
-                    <div class="flex flex-col">
-                      <label class="field-label mb-1 min-h-[2.5rem]">5-year FD APR (%/Yr)</label>
-                      <input id="fd-60" type="number" value="3.40" step="0.01" class="input-field" title="Estimated 5-year fixed deposit APR (default current market)." />
-                    </div>
-                  </div>
+                  <label class="field-label">Expected APR of savings until buying (%/Yr)</label>
+                  <input id="wait-apr" type="number" value="5.0" step="0.01" class="input-field" title="Return on your savings until the purchase, as an APR applied a twelfth at a time each month, so 5.00% grows a balance by 5.12% over a year." />
                 </div>
               </div>
  
@@ -328,39 +289,39 @@
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div class="flex flex-col">
                     <label class="field-label mb-0 min-h-[2.5rem]">Property tax (%/Yr of home value)</label>
-                    <input id="property-tax" type="number" value="1.15" step="0.01" class="input-field" title="Annual property tax charged as a percentage of the home's value." />
+                    <input id="property-tax" type="number" value="1.15" step="0.01" class="input-field" title="Yearly property tax as a share of the home's value, so it grows as the home does. Charged monthly for as long as you own." />
                   </div>
                   <div class="flex flex-col">
                     <label class="field-label mb-0 min-h-[2.5rem]">Maintenance (%/Yr of home value)</label>
-                    <input id="maintenance-percent" type="number" value="1.0" step="0.01" class="input-field" title="Estimated annual maintenance cost as a percentage of the home's value." />
+                    <input id="maintenance-percent" type="number" value="1.0" step="0.01" class="input-field" title="Yearly upkeep as a share of the home's value, charged monthly for as long as you own." />
                   </div>
                   <div class="flex flex-col">
                     <label class="field-label mb-0 min-h-[2.5rem]">Utilities ($/Mo)</label>
-                    <input id="utilities-monthly" type="number" value="350" class="input-field" title="Typical monthly utility expense after buying the home." />
+                    <input id="utilities-monthly" type="number" value="350" class="input-field" title="Monthly utilities once you own: hydro, gas, water. A flat amount that does not grow." />
                   </div>
                 </div>
  
                 <div class="space-y-1.5 mt-3">
                   <label class="field-label">Home insurance (%/Yr of home value)</label>
-                  <input id="home-insurance-percent" type="number" value="0.20" step="0.01" class="input-field" title="Annual homeowner insurance cost expressed as a percentage of home value. Home insurance typically scales with replacement value, so a percentage of the home's value models it well." />
+                  <input id="home-insurance-percent" type="number" value="0.20" step="0.01" class="input-field" title="Yearly homeowner insurance as a share of the home's value, charged monthly like the other running costs." />
                 </div>
                 <div class="space-y-1.5 mt-3">
-                  <label class="field-label">Investment return after purchase (%/Yr)</label>
-                  <input id="investment-apr" type="number" value="5.0" step="0.01" class="input-field" title="Annual return used after purchase for any remaining cash and for the monthly surplus left once the mortgage payment and ownership costs are paid. A monthly shortfall is charged at the same rate. It is also the fallback return for waiting-period cash when no fixed-deposit term matches Month B." />
+                  <label class="field-label">Expected APR of savings after buying (%/Yr)</label>
+                  <input id="own-apr" type="number" value="5.0" step="0.01" class="input-field" title="Return on the savings you hold after buying, applied the same way. A month that costs more than it brings in is charged at this rate once the balance runs out." />
                 </div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                   <div class="flex flex-col">
                     <label class="field-label mb-0.5 min-h-[2.25rem]">Selling cost rate (% of sale price)</label>
-                    <input id="realtor-commission" type="number" value="5.65" step="0.01" class="input-field" title="Estimated percentage-based selling costs such as realtor commission, buyer agent fee, and other sale-price-linked fees. Typical examples are real-estate commissions, marketing costs, and similar percentages of the final sale price." />
+                    <input id="realtor-commission" type="number" value="5.65" step="0.01" class="input-field" title="Selling costs that scale with the sale price: commission plus HST, and any other percentage fees. Charged once, at Month S." />
                   </div>
                   <div class="flex flex-col">
                     <label class="field-label mb-0.5 min-h-[2.25rem]">Fixed selling fees ($)</label>
-                    <input id="legal-fees" type="number" value="2500" class="input-field" title="Fixed one-off selling costs such as legal fees, title transfer, mortgage discharge/admin charges, and other flat transaction fees that do not scale with sale price." />
+                    <input id="legal-fees" type="number" value="2500" class="input-field" title="Flat selling costs at Month S: lawyer, discharge, title transfer. Added on top of the percentage beside it." />
                   </div>
                 </div>
                 <div class="space-y-1.5 mt-3">
                   <label class="field-label">Sale month S (months since today)</label>
-                  <input id="selected-s" type="number" min="0" step="1" value="120" class="input-field" title="Absolute month, counted from today, at which the home is sold. It ends both paths, so every chart is measured at this month, and it is the upper limit of the main chart's x-axis. Must be at least the purchase month B for the buy path to complete before the sale." />
+                  <input id="selected-s" type="number" min="0" step="1" value="120" class="input-field" title="The month both paths are measured at, counted from today. The home is sold here, and it is also the right-hand edge of the chart." />
                 </div>
               </div>
             </div>
@@ -385,7 +346,7 @@
               <div class="flex items-center justify-between gap-2 mb-2">
                 <div class="text-sm font-semibold text-gray-700">Charts to display</div>
                 <div class="flex items-center gap-2">
-                  <button type="button" id="plot-all" class="px-2.5 py-1 text-xs bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200" title="Tick every chart in every section. Charts that are unavailable under the current investment strategy stay off.">Plot all</button>
+                  <button type="button" id="plot-all" class="px-2.5 py-1 text-xs bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200" title="Tick every chart in every section.">Plot all</button>
                   <button type="button" id="plot-none" class="px-2.5 py-1 text-xs bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200" title="Untick every chart, clearing the plot.">Plot none</button>
                 </div>
               </div>
@@ -452,6 +413,7 @@
   <script src="js/util.js"></script>
   <script src="js/model.js"></script>
   <script src="js/inputs.js"></script>
+  <script src="js/saved-inputs.js"></script>
   <script src="js/series.js"></script>
   <script src="js/series-controls.js"></script>
   <script src="js/line-chart.js"></script>
